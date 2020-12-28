@@ -1,0 +1,53 @@
+version: "3"
+
+services:
+
+  runtime-setup:
+    image: netty:default
+    build:
+      context: .
+      dockerfile: Dockerfile.centos6
+
+  common: &common
+    image: netty:default
+    depends_on: [runtime-setup]
+    volumes:
+      - ~/.ssh:/root/.ssh
+      - ~/.gnupg:/root/.gnupg
+      - ~/.m2:/root/.m2
+      - ..:/code
+    working_dir: /code
+
+  build-leak:
+    <<: *common
+    command: /bin/bash -cl "./mvnw -Pleak clean install -Dio.netty.testsuite.badHost=netty.io"
+
+  build:
+    <<: *common
+    command: /bin/bash -cl "./mvnw clean install -Dio.netty.testsuite.badHost=netty.io"
+
+  deploy:
+    <<: *common
+    command: /bin/bash -cl "./mvnw clean deploy -DskipTests=true"
+
+  stage-snapshot:
+    <<: *common
+    volumes:
+      - ~/.ssh:/root/.ssh
+      - ~/.gnupg:/root/.gnupg
+      - ~/.m2:/root/.m2
+      - ~/local-staging:/root/local-staging
+      - ..:/code
+    command: /bin/bash -cl "./mvnw clean package org.sonatype.plugins:nexus-staging-maven-plugin:deploy -DaltStagingDirectory=/root/local-staging -DskipRemoteStaging=true -DskipTests=true"
+
+  build-boringssl-static:
+    <<: *common
+    command: /bin/bash -cl "./mvnw -P boringssl clean install -Dio.netty.testsuite.badHost=netty.io -Dxml.skip=true"
+
+  build-leak-boringssl-static:
+    <<: *common
+    command: /bin/bash -cl "./mvnw -Pboringssl,leak clean install -Dio.netty.testsuite.badHost=netty.io -Dxml.skip=true"
+
+  shell:
+    <<: *common
+    entrypoint: /bin/bash
