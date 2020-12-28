@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,12 +19,11 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopException;
-import io.netty.channel.EventLoopTaskQueueFactory;
 import io.netty.channel.SelectStrategy;
 import io.netty.channel.SingleThreadEventLoop;
+import io.netty.channel.nio.AbstractNioChannel.NioUnsafe;
 import io.netty.util.IntSupplier;
 import io.netty.util.concurrent.RejectedExecutionHandler;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.ReflectionUtil;
 import io.netty.util.internal.SystemPropertyUtil;
@@ -35,9 +34,8 @@ import java.io.IOException;
 import java.lang.reflect.Field;
 import java.nio.channels.CancelledKeyException;
 import java.nio.channels.SelectableChannel;
-import java.nio.channels.Selector;
 import java.nio.channels.SelectionKey;
-
+import java.nio.channels.Selector;
 import java.nio.channels.spi.SelectorProvider;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
@@ -46,8 +44,10 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Queue;
 import java.util.Set;
-import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * {@link SingleThreadEventLoop} implementation which register the {@link Channel}'s to a
@@ -60,7 +60,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private static final int CLEANUP_INTERVAL = 256; // XXX Hard-coded value, but won't need customization.
 
-    private static final boolean DISABLE_KEY_SET_OPTIMIZATION =
+    private static final boolean DISABLE_KEYSET_OPTIMIZATION =
             SystemPropertyUtil.getBoolean("io.netty.noKeySetOptimization", false);
 
     private static final int MIN_PREMATURE_SELECTOR_RETURNS = 3;
@@ -72,16 +72,22 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             return selectNow();
         }
     };
+    private final Callable<Integer> pendingTasksCallable = new Callable<Integer>() {
+        @Override
+        public Integer call() throws Exception {
+            return NioEventLoop.super.pendingTasks();
+        }
+    };
 
     // Workaround for JDK NIO bug.
     //
     // See:
-    // - https://bugs.java.com/view_bug.do?bug_id=6427854
+    // - http://bugs.sun.com/view_bug.do?bug_id=6427854
     // - https://github.com/netty/netty/issues/203
     static {
         final String key = "sun.nio.ch.bugLevel";
-        final String bugLevel = SystemPropertyUtil.get(key);
-        if (bugLevel == null) {
+        final String buglevel = SystemPropertyUtil.get(key);
+        if (buglevel == null) {
             try {
                 AccessController.doPrivileged(new PrivilegedAction<Void>() {
                     @Override
@@ -103,7 +109,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         SELECTOR_AUTO_REBUILD_THRESHOLD = selectorAutoRebuildThreshold;
 
         if (logger.isDebugEnabled()) {
-            logger.debug("-Dio.netty.noKeySetOptimization: {}", DISABLE_KEY_SET_OPTIMIZATION);
+            logger.debug("-Dio.netty.noKeySetOptimization: {}", DISABLE_KEYSET_OPTIMIZATION);
             logger.debug("-Dio.netty.selectorAutoRebuildThreshold: {}", SELECTOR_AUTO_REBUILD_THRESHOLD);
         }
     }
@@ -117,14 +123,13 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     private final SelectorProvider provider;
 
-    private static final long AWAKE = -1L;
-    private static final long NONE = Long.MAX_VALUE;
-
-    // nextWakeupNanos is:
-    //    AWAKE            when EL is awake
-    //    NONE             when EL is waiting with no wakeup scheduled
-    //    other value T    when EL is waiting with wakeup scheduled at time T
-    private final AtomicLong nextWakeupNanos = new AtomicLong(AWAKE);
+    /**
+     * Boolean that controls determines if a blocked Selector.select should
+     * break out of its selection process. In our case we use a timeout for
+     * the select method and the select method will block for that time unless
+     * waken up.
+     */
+    private final AtomicBoolean wakenUp = new AtomicBoolean();
 
     private final SelectStrategy selectStrategy;
 
@@ -132,24 +137,20 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     private int cancelledKeys;
     private boolean needsToSelectAgain;
 
-    NioEventLoop(NioEventLoopGroup parent, Executor executor, SelectorProvider selectorProvider,
-                 SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler,
-                 EventLoopTaskQueueFactory queueFactory) {
-        super(parent, executor, false, newTaskQueue(queueFactory), newTaskQueue(queueFactory),
-                rejectedExecutionHandler);
-        this.provider = ObjectUtil.checkNotNull(selectorProvider, "selectorProvider");
-        this.selectStrategy = ObjectUtil.checkNotNull(strategy, "selectStrategy");
-        final SelectorTuple selectorTuple = openSelector();
-        this.selector = selectorTuple.selector;
-        this.unwrappedSelector = selectorTuple.unwrappedSelector;
-    }
-
-    private static Queue<Runnable> newTaskQueue(
-            EventLoopTaskQueueFactory queueFactory) {
-        if (queueFactory == null) {
-            return newTaskQueue0(DEFAULT_MAX_PENDING_TASKS);
+    NioEventLoop(NioEventLoopGroup parent, ThreadFactory threadFactory, SelectorProvider selectorProvider,
+                 SelectStrategy strategy, RejectedExecutionHandler rejectedExecutionHandler) {
+        super(parent, threadFactory, false, DEFAULT_MAX_PENDING_TASKS, rejectedExecutionHandler);
+        if (selectorProvider == null) {
+            throw new NullPointerException("selectorProvider");
         }
-        return queueFactory.newTaskQueue(DEFAULT_MAX_PENDING_TASKS);
+        if (strategy == null) {
+            throw new NullPointerException("selectStrategy");
+        }
+        provider = selectorProvider;
+        final SelectorTuple selectorTuple = openSelector();
+        selector = selectorTuple.selector;
+        unwrappedSelector = selectorTuple.unwrappedSelector;
+        selectStrategy = strategy;
     }
 
     private static final class SelectorTuple {
@@ -175,9 +176,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             throw new ChannelException("failed to open a new selector", e);
         }
 
-        if (DISABLE_KEY_SET_OPTIMIZATION) {
+        if (DISABLE_KEYSET_OPTIMIZATION) {
             return new SelectorTuple(unwrappedSelector);
         }
+
+        final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
 
         Object maybeSelectorImplClass = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -194,8 +197,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         });
 
         if (!(maybeSelectorImplClass instanceof Class) ||
-            // ensure the current selector implementation is what we can instrument.
-            !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
+                // ensure the current selector implementation is what we can instrument.
+                !((Class<?>) maybeSelectorImplClass).isAssignableFrom(unwrappedSelector.getClass())) {
             if (maybeSelectorImplClass instanceof Throwable) {
                 Throwable t = (Throwable) maybeSelectorImplClass;
                 logger.trace("failed to instrument a special java.util.Set into: {}", unwrappedSelector, t);
@@ -204,7 +207,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
         }
 
         final Class<?> selectorImplClass = (Class<?>) maybeSelectorImplClass;
-        final SelectedSelectionKeySet selectedKeySet = new SelectedSelectionKeySet();
 
         Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
             @Override
@@ -212,23 +214,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                 try {
                     Field selectedKeysField = selectorImplClass.getDeclaredField("selectedKeys");
                     Field publicSelectedKeysField = selectorImplClass.getDeclaredField("publicSelectedKeys");
-
-                    if (PlatformDependent.javaVersion() >= 9 && PlatformDependent.hasUnsafe()) {
-                        // Let us try to use sun.misc.Unsafe to replace the SelectionKeySet.
-                        // This allows us to also do this in Java9+ without any extra flags.
-                        long selectedKeysFieldOffset = PlatformDependent.objectFieldOffset(selectedKeysField);
-                        long publicSelectedKeysFieldOffset =
-                                PlatformDependent.objectFieldOffset(publicSelectedKeysField);
-
-                        if (selectedKeysFieldOffset != -1 && publicSelectedKeysFieldOffset != -1) {
-                            PlatformDependent.putObject(
-                                    unwrappedSelector, selectedKeysFieldOffset, selectedKeySet);
-                            PlatformDependent.putObject(
-                                    unwrappedSelector, publicSelectedKeysFieldOffset, selectedKeySet);
-                            return null;
-                        }
-                        // We could not retrieve the offset, lets try reflection as last-resort.
-                    }
 
                     Throwable cause = ReflectionUtil.trySetAccessible(selectedKeysField, true);
                     if (cause != null) {
@@ -271,13 +256,21 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     @Override
     protected Queue<Runnable> newTaskQueue(int maxPendingTasks) {
-        return newTaskQueue0(maxPendingTasks);
-    }
-
-    private static Queue<Runnable> newTaskQueue0(int maxPendingTasks) {
         // This event loop never calls takeTask()
         return maxPendingTasks == Integer.MAX_VALUE ? PlatformDependent.<Runnable>newMpscQueue()
-                : PlatformDependent.<Runnable>newMpscQueue(maxPendingTasks);
+                                                    : PlatformDependent.<Runnable>newMpscQueue(maxPendingTasks);
+    }
+
+    @Override
+    public int pendingTasks() {
+        // As we use a MpscQueue we need to ensure pendingTasks() is only executed from within the EventLoop as
+        // otherwise we may see unexpected behavior (as size() is only allowed to be called by a single consumer).
+        // See https://github.com/netty/netty/issues/5297
+        if (inEventLoop()) {
+            return super.pendingTasks();
+        } else {
+            return submit(pendingTasksCallable).syncUninterruptibly().getNow();
+        }
     }
 
     /**
@@ -286,7 +279,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
      * be executed by this event loop when the {@link SelectableChannel} is ready.
      */
     public void register(final SelectableChannel ch, final int interestOps, final NioTask<?> task) {
-        ObjectUtil.checkNotNull(ch, "ch");
+        if (ch == null) {
+            throw new NullPointerException("ch");
+        }
         if (interestOps == 0) {
             throw new IllegalArgumentException("interestOps must be non-zero.");
         }
@@ -294,34 +289,16 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             throw new IllegalArgumentException(
                     "invalid interestOps: " + interestOps + "(validOps: " + ch.validOps() + ')');
         }
-        ObjectUtil.checkNotNull(task, "task");
+        if (task == null) {
+            throw new NullPointerException("task");
+        }
 
         if (isShutdown()) {
             throw new IllegalStateException("event loop shut down");
         }
 
-        if (inEventLoop()) {
-            register0(ch, interestOps, task);
-        } else {
-            try {
-                // Offload to the EventLoop as otherwise java.nio.channels.spi.AbstractSelectableChannel.register
-                // may block for a long time while trying to obtain an internal lock that may be hold while selecting.
-                submit(new Runnable() {
-                    @Override
-                    public void run() {
-                        register0(ch, interestOps, task);
-                    }
-                }).sync();
-            } catch (InterruptedException ignore) {
-                // Even if interrupted we did schedule it so just mark the Thread as interrupted.
-                Thread.currentThread().interrupt();
-            }
-        }
-    }
-
-    private void register0(SelectableChannel ch, int interestOps, NioTask<?> task) {
         try {
-            ch.register(unwrappedSelector, interestOps, task);
+            ch.register(selector, interestOps, task);
         } catch (Exception e) {
             throw new EventLoopException("failed to register a channel", e);
         }
@@ -335,10 +312,8 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     /**
-     * Sets the percentage of the desired amount of time spent for I/O in the event loop. Value range from 1-100.
-     * The default value is {@code 50}, which means the event loop will try to spend the same amount of time for I/O
-     * as for non-I/O tasks. The lower the number the more time can be spent on non-I/O tasks. If value set to
-     * {@code 100}, this feature will be disabled and event loop will not attempt to balance I/O and non-I/O tasks.
+     * Sets the percentage of the desired amount of time spent for I/O in the event loop.  The default value is
+     * {@code 50}, which means the event loop will try to spend the same amount of time for I/O as for non-I/O tasks.
      */
     public void setIoRatio(int ioRatio) {
         if (ioRatio <= 0 || ioRatio > 100) {
@@ -362,11 +337,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             return;
         }
         rebuildSelector0();
-    }
-
-    @Override
-    public int registeredChannels() {
-        return selector.keys().size() - cancelledKeys;
     }
 
     private void rebuildSelector0() {
@@ -426,142 +396,89 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             }
         }
 
-        if (logger.isInfoEnabled()) {
-            logger.info("Migrated " + nChannels + " channel(s) to the new Selector.");
-        }
+        logger.info("Migrated " + nChannels + " channel(s) to the new Selector.");
     }
 
     @Override
     protected void run() {
-        int selectCnt = 0;
         for (;;) {
             try {
-                int strategy;
-                try {
-                    strategy = selectStrategy.calculateStrategy(selectNowSupplier, hasTasks());
-                    switch (strategy) {
+                switch (selectStrategy.calculateStrategy(selectNowSupplier, hasTasks())) {
                     case SelectStrategy.CONTINUE:
                         continue;
-
-                    case SelectStrategy.BUSY_WAIT:
-                        // fall-through to SELECT since the busy-wait is not supported with NIO
-
                     case SelectStrategy.SELECT:
-                        long curDeadlineNanos = nextScheduledTaskDeadlineNanos();
-                        if (curDeadlineNanos == -1L) {
-                            curDeadlineNanos = NONE; // nothing on the calendar
-                        }
-                        nextWakeupNanos.set(curDeadlineNanos);
-                        try {
-                            if (!hasTasks()) {
-                                strategy = select(curDeadlineNanos);
-                            }
-                        } finally {
-                            // This update is just to help block unnecessary selector wakeups
-                            // so use of lazySet is ok (no race condition)
-                            nextWakeupNanos.lazySet(AWAKE);
+                        select(wakenUp.getAndSet(false));
+
+                        // 'wakenUp.compareAndSet(false, true)' is always evaluated
+                        // before calling 'selector.wakeup()' to reduce the wake-up
+                        // overhead. (Selector.wakeup() is an expensive operation.)
+                        //
+                        // However, there is a race condition in this approach.
+                        // The race condition is triggered when 'wakenUp' is set to
+                        // true too early.
+                        //
+                        // 'wakenUp' is set to true too early if:
+                        // 1) Selector is waken up between 'wakenUp.set(false)' and
+                        //    'selector.select(...)'. (BAD)
+                        // 2) Selector is waken up between 'selector.select(...)' and
+                        //    'if (wakenUp.get()) { ... }'. (OK)
+                        //
+                        // In the first case, 'wakenUp' is set to true and the
+                        // following 'selector.select(...)' will wake up immediately.
+                        // Until 'wakenUp' is set to false again in the next round,
+                        // 'wakenUp.compareAndSet(false, true)' will fail, and therefore
+                        // any attempt to wake up the Selector will fail, too, causing
+                        // the following 'selector.select(...)' call to block
+                        // unnecessarily.
+                        //
+                        // To fix this problem, we wake up the selector again if wakenUp
+                        // is true immediately after selector.select(...).
+                        // It is inefficient in that it wakes up the selector for both
+                        // the first case (BAD - wake-up required) and the second case
+                        // (OK - no wake-up required).
+
+                        if (wakenUp.get()) {
+                            selector.wakeup();
                         }
                         // fall through
                     default:
-                    }
-                } catch (IOException e) {
-                    // If we receive an IOException here its because the Selector is messed up. Let's rebuild
-                    // the selector and retry. https://github.com/netty/netty/issues/8566
-                    rebuildSelector0();
-                    selectCnt = 0;
-                    handleLoopException(e);
-                    continue;
                 }
 
-                selectCnt++;
                 cancelledKeys = 0;
                 needsToSelectAgain = false;
                 final int ioRatio = this.ioRatio;
-                boolean ranTasks;
                 if (ioRatio == 100) {
                     try {
-                        if (strategy > 0) {
-                            processSelectedKeys();
-                        }
+                        processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
-                        ranTasks = runAllTasks();
+                        runAllTasks();
                     }
-                } else if (strategy > 0) {
+                } else {
                     final long ioStartTime = System.nanoTime();
                     try {
                         processSelectedKeys();
                     } finally {
                         // Ensure we always run tasks.
                         final long ioTime = System.nanoTime() - ioStartTime;
-                        ranTasks = runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
+                        runAllTasks(ioTime * (100 - ioRatio) / ioRatio);
                     }
-                } else {
-                    ranTasks = runAllTasks(0); // This will run the minimum number of tasks
                 }
-
-                if (ranTasks || strategy > 0) {
-                    if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS && logger.isDebugEnabled()) {
-                        logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
-                                selectCnt - 1, selector);
-                    }
-                    selectCnt = 0;
-                } else if (unexpectedSelectorWakeup(selectCnt)) { // Unexpected wakeup (unusual case)
-                    selectCnt = 0;
-                }
-            } catch (CancelledKeyException e) {
-                // Harmless exception - log anyway
-                if (logger.isDebugEnabled()) {
-                    logger.debug(CancelledKeyException.class.getSimpleName() + " raised by a Selector {} - JDK bug?",
-                            selector, e);
-                }
-            } catch (Error e) {
-                throw (Error) e;
             } catch (Throwable t) {
                 handleLoopException(t);
-            } finally {
-                // Always handle shutdown even if the loop processing threw an exception.
-                try {
-                    if (isShuttingDown()) {
-                        closeAll();
-                        if (confirmShutdown()) {
-                            return;
-                        }
+            }
+            // Always handle shutdown even if the loop processing threw an exception.
+            try {
+                if (isShuttingDown()) {
+                    closeAll();
+                    if (confirmShutdown()) {
+                        return;
                     }
-                } catch (Error e) {
-                    throw (Error) e;
-                } catch (Throwable t) {
-                    handleLoopException(t);
                 }
+            } catch (Throwable t) {
+                handleLoopException(t);
             }
         }
-    }
-
-    // returns true if selectCnt should be reset
-    private boolean unexpectedSelectorWakeup(int selectCnt) {
-        if (Thread.interrupted()) {
-            // Thread was interrupted so reset selected keys and break so we not run into a busy loop.
-            // As this is most likely a bug in the handler of the user or it's client library we will
-            // also log it.
-            //
-            // See https://github.com/netty/netty/issues/2426
-            if (logger.isDebugEnabled()) {
-                logger.debug("Selector.select() returned prematurely because " +
-                        "Thread.currentThread().interrupt() was called. Use " +
-                        "NioEventLoop.shutdownGracefully() to shutdown the NioEventLoop.");
-            }
-            return true;
-        }
-        if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
-                selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
-            // The selector returned prematurely many times in a row.
-            // Rebuild the selector to work around the problem.
-            logger.warn("Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
-                    selectCnt, selector);
-            rebuildSelector();
-            return true;
-        }
-        return false;
     }
 
     private static void handleLoopException(Throwable t) {
@@ -600,6 +517,15 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             cancelledKeys = 0;
             needsToSelectAgain = true;
         }
+    }
+
+    @Override
+    protected Runnable pollTask() {
+        Runnable task = super.pollTask();
+        if (needsToSelectAgain) {
+            selectAgain();
+        }
+        return task;
     }
 
     private void processSelectedKeysPlain(Set<SelectionKey> selectedKeys) {
@@ -671,7 +597,7 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     private void processSelectedKey(SelectionKey k, AbstractNioChannel ch) {
-        final AbstractNioChannel.NioUnsafe unsafe = ch.unsafe();
+        final NioUnsafe unsafe = ch.unsafe();
         if (!k.isValid()) {
             final EventLoop eventLoop;
             try {
@@ -686,10 +612,11 @@ public final class NioEventLoop extends SingleThreadEventLoop {
             // and thus the SelectionKey could be cancelled as part of the deregistration process, but the channel is
             // still healthy and should not be closed.
             // See https://github.com/netty/netty/issues/5125
-            if (eventLoop == this) {
-                // close the channel if the key is not valid anymore
-                unsafe.close(unsafe.voidPromise());
+            if (eventLoop != this || eventLoop == null) {
+                return;
             }
+            // close the channel if the key is not valid anymore
+            unsafe.close(unsafe.voidPromise());
             return;
         }
 
@@ -743,8 +670,6 @@ public final class NioEventLoop extends SingleThreadEventLoop {
                     invokeChannelUnregistered(task, k, null);
                 }
                 break;
-            default:
-                 break;
             }
         }
     }
@@ -780,21 +705,9 @@ public final class NioEventLoop extends SingleThreadEventLoop {
 
     @Override
     protected void wakeup(boolean inEventLoop) {
-        if (!inEventLoop && nextWakeupNanos.getAndSet(AWAKE) != AWAKE) {
+        if (!inEventLoop && wakenUp.compareAndSet(false, true)) {
             selector.wakeup();
         }
-    }
-
-    @Override
-    protected boolean beforeScheduledTaskSubmitted(long deadlineNanos) {
-        // Note this is also correct for the nextWakeupNanos == -1 (AWAKE) case
-        return deadlineNanos < nextWakeupNanos.get();
-    }
-
-    @Override
-    protected boolean afterScheduledTaskSubmitted(long deadlineNanos) {
-        // Note this is also correct for the nextWakeupNanos == -1 (AWAKE) case
-        return deadlineNanos < nextWakeupNanos.get();
     }
 
     Selector unwrappedSelector() {
@@ -802,16 +715,104 @@ public final class NioEventLoop extends SingleThreadEventLoop {
     }
 
     int selectNow() throws IOException {
-        return selector.selectNow();
+        try {
+            return selector.selectNow();
+        } finally {
+            // restore wakeup state if needed
+            if (wakenUp.get()) {
+                selector.wakeup();
+            }
+        }
     }
 
-    private int select(long deadlineNanos) throws IOException {
-        if (deadlineNanos == NONE) {
-            return selector.select();
+    private void select(boolean oldWakenUp) throws IOException {
+        Selector selector = this.selector;
+        try {
+            int selectCnt = 0;
+            long currentTimeNanos = System.nanoTime();
+            long selectDeadLineNanos = currentTimeNanos + delayNanos(currentTimeNanos);
+            for (;;) {
+                long timeoutMillis = (selectDeadLineNanos - currentTimeNanos + 500000L) / 1000000L;
+                if (timeoutMillis <= 0) {
+                    if (selectCnt == 0) {
+                        selector.selectNow();
+                        selectCnt = 1;
+                    }
+                    break;
+                }
+
+                // If a task was submitted when wakenUp value was true, the task didn't get a chance to call
+                // Selector#wakeup. So we need to check task queue again before executing select operation.
+                // If we don't, the task might be pended until select operation was timed out.
+                // It might be pended until idle timeout if IdleStateHandler existed in pipeline.
+                if (hasTasks() && wakenUp.compareAndSet(false, true)) {
+                    selector.selectNow();
+                    selectCnt = 1;
+                    break;
+                }
+
+                int selectedKeys = selector.select(timeoutMillis);
+                selectCnt ++;
+
+                if (selectedKeys != 0 || oldWakenUp || wakenUp.get() || hasTasks() || hasScheduledTasks()) {
+                    // - Selected something,
+                    // - waken up by user, or
+                    // - the task queue has a pending task.
+                    // - a scheduled task is ready for processing
+                    break;
+                }
+                if (Thread.interrupted()) {
+                    // Thread was interrupted so reset selected keys and break so we not run into a busy loop.
+                    // As this is most likely a bug in the handler of the user or it's client library we will
+                    // also log it.
+                    //
+                    // See https://github.com/netty/netty/issues/2426
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Selector.select() returned prematurely because " +
+                                "Thread.currentThread().interrupt() was called. Use " +
+                                "NioEventLoop.shutdownGracefully() to shutdown the NioEventLoop.");
+                    }
+                    selectCnt = 1;
+                    break;
+                }
+
+                long time = System.nanoTime();
+                if (time - TimeUnit.MILLISECONDS.toNanos(timeoutMillis) >= currentTimeNanos) {
+                    // timeoutMillis elapsed without anything selected.
+                    selectCnt = 1;
+                } else if (SELECTOR_AUTO_REBUILD_THRESHOLD > 0 &&
+                        selectCnt >= SELECTOR_AUTO_REBUILD_THRESHOLD) {
+                    // The selector returned prematurely many times in a row.
+                    // Rebuild the selector to work around the problem.
+                    logger.warn(
+                            "Selector.select() returned prematurely {} times in a row; rebuilding Selector {}.",
+                            selectCnt, selector);
+
+                    rebuildSelector();
+                    selector = this.selector;
+
+                    // Select again to populate selectedKeys.
+                    selector.selectNow();
+                    selectCnt = 1;
+                    break;
+                }
+
+                currentTimeNanos = time;
+            }
+
+            if (selectCnt > MIN_PREMATURE_SELECTOR_RETURNS) {
+                if (logger.isDebugEnabled()) {
+                    logger.debug("Selector.select() returned prematurely {} times in a row for Selector {}.",
+                            selectCnt - 1, selector);
+                }
+            }
+        } catch (CancelledKeyException e) {
+            if (logger.isDebugEnabled()) {
+                logger.debug(CancelledKeyException.class.getSimpleName() + " raised by a Selector {} - JDK bug?",
+                        selector, e);
+            }
+            // Harmless exception - log anyway
         }
-        // Timeout will only be 0 if deadline is within 5 microsecs
-        long timeoutMillis = deadlineToDelayNanos(deadlineNanos + 995000L) / 1000000L;
-        return timeoutMillis <= 0 ? selector.selectNow() : selector.select(timeoutMillis);
     }
 
     private void selectAgain() {

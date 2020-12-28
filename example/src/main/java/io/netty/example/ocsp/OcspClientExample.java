@@ -5,7 +5,7 @@
  * 2.0 (the "License"); you may not use this file except in compliance with the
  * License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,7 +21,7 @@ import java.math.BigInteger;
 import javax.net.ssl.SSLSession;
 import javax.security.cert.X509Certificate;
 
-import io.netty.buffer.Unpooled;
+import io.netty.handler.codec.http.HttpHeaders;
 import org.bouncycastle.asn1.ocsp.OCSPResponseStatus;
 import org.bouncycastle.cert.ocsp.BasicOCSPResp;
 import org.bouncycastle.cert.ocsp.CertificateStatus;
@@ -43,7 +43,6 @@ import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpVersion;
@@ -58,8 +57,8 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Promise;
 
 /**
- * This is a very simple example for an HTTPS client that uses OCSP stapling.
- * The client connects to an HTTPS server that has OCSP stapling enabled and
+ * This is a very simple example for a HTTPS client that uses OCSP stapling.
+ * The client connects to a HTTPS server that has OCSP stapling enabled and
  * then uses BC to parse and validate it.
  */
 public class OcspClientExample {
@@ -158,17 +157,16 @@ public class OcspClientExample {
 
         private final Promise<FullHttpResponse> promise;
 
-        HttpClientHandler(String host, Promise<FullHttpResponse> promise) {
+        public HttpClientHandler(String host, Promise<FullHttpResponse> promise) {
             this.host = host;
             this.promise = promise;
         }
 
         @Override
         public void channelActive(ChannelHandlerContext ctx) throws Exception {
-            FullHttpRequest request = new DefaultFullHttpRequest(
-                    HttpVersion.HTTP_1_1, HttpMethod.GET, "/", Unpooled.EMPTY_BUFFER);
-            request.headers().set(HttpHeaderNames.HOST, host);
-            request.headers().set(HttpHeaderNames.USER_AGENT, "netty-ocsp-example/1.0");
+            FullHttpRequest request = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/");
+            request.headers().set(HttpHeaders.Names.HOST, host);
+            request.headers().set(HttpHeaders.Names.USER_AGENT, "netty-ocsp-example/1.0");
 
             ctx.writeAndFlush(request).addListener(ChannelFutureListener.FIRE_EXCEPTION_ON_FAILURE);
 
@@ -205,7 +203,7 @@ public class OcspClientExample {
 
     private static class ExampleOcspClientHandler extends OcspClientHandler {
 
-        ExampleOcspClientHandler(ReferenceCountedOpenSslEngine engine) {
+        public ExampleOcspClientHandler(ReferenceCountedOpenSslEngine engine) {
             super(engine);
         }
 

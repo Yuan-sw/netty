@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -48,22 +48,22 @@ public class WebSocketFrameAggregatorTest {
 
         Assert.assertTrue(channel.finish());
 
-        BinaryWebSocketFrame frame = channel.readInbound();
+        BinaryWebSocketFrame frame = (BinaryWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame.isFinalFragment());
         Assert.assertEquals(1, frame.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame.content()));
 
-        PingWebSocketFrame frame2 = channel.readInbound();
+        PingWebSocketFrame frame2 = (PingWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame2.isFinalFragment());
         Assert.assertEquals(0, frame2.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame2.content()));
 
-        PongWebSocketFrame frame3 = channel.readInbound();
+        PongWebSocketFrame frame3 = (PongWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame3.isFinalFragment());
         Assert.assertEquals(0, frame3.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame3.content()));
 
-        BinaryWebSocketFrame frame4 = channel.readInbound();
+        BinaryWebSocketFrame frame4 = (BinaryWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame4.isFinalFragment());
         Assert.assertEquals(0, frame4.rsv());
         Assert.assertArrayEquals(aggregatedContent, toBytes(frame4.content()));
@@ -83,22 +83,22 @@ public class WebSocketFrameAggregatorTest {
 
         Assert.assertTrue(channel.finish());
 
-        TextWebSocketFrame frame = channel.readInbound();
+        TextWebSocketFrame frame = (TextWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame.isFinalFragment());
         Assert.assertEquals(1, frame.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame.content()));
 
-        PingWebSocketFrame frame2 = channel.readInbound();
+        PingWebSocketFrame frame2 = (PingWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame2.isFinalFragment());
         Assert.assertEquals(0, frame2.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame2.content()));
 
-        PongWebSocketFrame frame3 = channel.readInbound();
+        PongWebSocketFrame frame3 = (PongWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame3.isFinalFragment());
         Assert.assertEquals(0, frame3.rsv());
         Assert.assertArrayEquals(content1, toBytes(frame3.content()));
 
-        TextWebSocketFrame frame4 = channel.readInbound();
+        TextWebSocketFrame frame4 = (TextWebSocketFrame) channel.readInbound();
         Assert.assertTrue(frame4.isFinalFragment());
         Assert.assertEquals(0, frame4.rsv());
         Assert.assertArrayEquals(aggregatedContent, toBytes(frame4.content()));

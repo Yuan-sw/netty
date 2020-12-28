@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,6 +16,8 @@
 package io.netty.handler.codec.http;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufHolder;
+import io.netty.buffer.CompositeByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
@@ -23,15 +25,15 @@ import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.handler.codec.DecoderResult;
-import io.netty.handler.codec.MessageAggregator;
+import io.netty.handler.codec.MessageToMessageDecoder;
 import io.netty.handler.codec.TooLongFrameException;
-import io.netty.util.internal.logging.InternalLogger;
-import io.netty.util.internal.logging.InternalLoggerFactory;
+import io.netty.handler.codec.http.HttpHeaders.Names;
 
-import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaderNames.EXPECT;
-import static io.netty.handler.codec.http.HttpUtil.getContentLength;
+import java.util.List;
+
+import static io.netty.handler.codec.http.HttpHeaders.is100ContinueExpected;
+import static io.netty.handler.codec.http.HttpHeaders.isContentLengthSet;
+import static io.netty.handler.codec.http.HttpHeaders.removeTransferEncodingChunked;
 
 /**
  * A {@link ChannelHandler} that aggregates an {@link HttpMessage}
@@ -84,33 +86,31 @@ import static io.netty.handler.codec.http.HttpUtil.getContentLength;
  * @see HttpResponseDecoder
  * @see HttpServerCodec
  */
-public class HttpObjectAggregator
-        extends MessageAggregator<HttpObject, HttpMessage, HttpContent, FullHttpMessage> {
-    private static final InternalLogger logger = InternalLoggerFactory.getInstance(HttpObjectAggregator.class);
+public class HttpObjectAggregator extends MessageToMessageDecoder<HttpObject> {
+    public static final int DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS = 1024;
     private static final FullHttpResponse CONTINUE =
             new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.CONTINUE, Unpooled.EMPTY_BUFFER);
     private static final FullHttpResponse EXPECTATION_FAILED = new DefaultFullHttpResponse(
             HttpVersion.HTTP_1_1, HttpResponseStatus.EXPECTATION_FAILED, Unpooled.EMPTY_BUFFER);
-    private static final FullHttpResponse TOO_LARGE_CLOSE = new DefaultFullHttpResponse(
-            HttpVersion.HTTP_1_1, HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, Unpooled.EMPTY_BUFFER);
-    private static final FullHttpResponse TOO_LARGE = new DefaultFullHttpResponse(
-        HttpVersion.HTTP_1_1, HttpResponseStatus.REQUEST_ENTITY_TOO_LARGE, Unpooled.EMPTY_BUFFER);
 
     static {
-        EXPECTATION_FAILED.headers().set(CONTENT_LENGTH, 0);
-        TOO_LARGE.headers().set(CONTENT_LENGTH, 0);
-
-        TOO_LARGE_CLOSE.headers().set(CONTENT_LENGTH, 0);
-        TOO_LARGE_CLOSE.headers().set(CONNECTION, HttpHeaderValues.CLOSE);
+        HttpHeaders.setContentLength(EXPECTATION_FAILED, 0);
     }
 
+    private final int maxContentLength;
+    private AggregatedFullHttpMessage currentMessage;
     private final boolean closeOnExpectationFailed;
+
+    private int maxCumulationBufferComponents = DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS;
+    private ChannelHandlerContext ctx;
 
     /**
      * Creates a new instance.
-     * @param maxContentLength the maximum length of the aggregated content in bytes.
-     * If the length of the aggregated content exceeds this value,
-     * {@link #handleOversizedMessage(ChannelHandlerContext, HttpMessage)} will be called.
+     *
+     * @param maxContentLength
+     *        the maximum length of the aggregated content in bytes.
+     *        If the length of the aggregated content exceeds this value,
+     *        a {@link TooLongFrameException} will be raised.
      */
     public HttpObjectAggregator(int maxContentLength) {
         this(maxContentLength, false);
@@ -118,168 +118,228 @@ public class HttpObjectAggregator
 
     /**
      * Creates a new instance.
-     * @param maxContentLength the maximum length of the aggregated content in bytes.
-     * If the length of the aggregated content exceeds this value,
-     * {@link #handleOversizedMessage(ChannelHandlerContext, HttpMessage)} will be called.
+     * @param maxContentLength
+     *        the maximum length of the aggregated content in bytes.
+     *        If the length of the aggregated content exceeds this value,
+     *        a {@link TooLongFrameException} will be raised.
      * @param closeOnExpectationFailed If a 100-continue response is detected but the content length is too large
      * then {@code true} means close the connection. otherwise the connection will remain open and data will be
      * consumed and discarded until the next request is received.
      */
     public HttpObjectAggregator(int maxContentLength, boolean closeOnExpectationFailed) {
-        super(maxContentLength);
+        if (maxContentLength <= 0) {
+            throw new IllegalArgumentException("maxContentLength must be a positive integer: " + maxContentLength);
+        }
+        this.maxContentLength = maxContentLength;
         this.closeOnExpectationFailed = closeOnExpectationFailed;
     }
-
-    @Override
-    protected boolean isStartMessage(HttpObject msg) throws Exception {
-        return msg instanceof HttpMessage;
+    /**
+     * Returns the maximum number of components in the cumulation buffer.  If the number of
+     * the components in the cumulation buffer exceeds this value, the components of the
+     * cumulation buffer are consolidated into a single component, involving memory copies.
+     * The default value of this property is {@link #DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS}.
+     */
+    public final int getMaxCumulationBufferComponents() {
+        return maxCumulationBufferComponents;
     }
 
-    @Override
-    protected boolean isContentMessage(HttpObject msg) throws Exception {
-        return msg instanceof HttpContent;
-    }
+    /**
+     * Sets the maximum number of components in the cumulation buffer.  If the number of
+     * the components in the cumulation buffer exceeds this value, the components of the
+     * cumulation buffer are consolidated into a single component, involving memory copies.
+     * The default value of this property is {@link #DEFAULT_MAX_COMPOSITEBUFFER_COMPONENTS}
+     * and its minimum allowed value is {@code 2}.
+     */
+    public final void setMaxCumulationBufferComponents(int maxCumulationBufferComponents) {
+        if (maxCumulationBufferComponents < 2) {
+            throw new IllegalArgumentException(
+                    "maxCumulationBufferComponents: " + maxCumulationBufferComponents +
+                    " (expected: >= 2)");
+        }
 
-    @Override
-    protected boolean isLastContentMessage(HttpContent msg) throws Exception {
-        return msg instanceof LastHttpContent;
-    }
-
-    @Override
-    protected boolean isAggregated(HttpObject msg) throws Exception {
-        return msg instanceof FullHttpMessage;
-    }
-
-    @Override
-    protected boolean isContentLengthInvalid(HttpMessage start, int maxContentLength) {
-        try {
-            return getContentLength(start, -1L) > maxContentLength;
-        } catch (final NumberFormatException e) {
-            return false;
+        if (ctx == null) {
+            this.maxCumulationBufferComponents = maxCumulationBufferComponents;
+        } else {
+            throw new IllegalStateException(
+                    "decoder properties cannot be changed once the decoder is added to a pipeline.");
         }
     }
 
-    private static Object continueResponse(HttpMessage start, int maxContentLength, ChannelPipeline pipeline) {
-        if (HttpUtil.isUnsupportedExpectation(start)) {
-            // if the request contains an unsupported expectation, we return 417
-            pipeline.fireUserEventTriggered(HttpExpectationFailedEvent.INSTANCE);
-            return EXPECTATION_FAILED.retainedDuplicate();
-        } else if (HttpUtil.is100ContinueExpected(start)) {
-            // if the request contains 100-continue but the content-length is too large, we return 413
-            if (getContentLength(start, -1L) <= maxContentLength) {
-                return CONTINUE.retainedDuplicate();
+    @Override
+    protected void decode(final ChannelHandlerContext ctx, HttpObject msg, List<Object> out) throws Exception {
+        if (msg instanceof HttpMessage) {
+            if (currentMessage != null) {
+                currentMessage.release();
+                currentMessage = null;
+                throw new IllegalStateException("Start of new message received before existing message completed.");
             }
-            pipeline.fireUserEventTriggered(HttpExpectationFailedEvent.INSTANCE);
-            return TOO_LARGE.retainedDuplicate();
-        }
+            HttpMessage m = (HttpMessage) msg;
 
-        return null;
-    }
+            // Handle the 'Expect: 100-continue' header if necessary.
+            if (is100ContinueExpected(m)) {
+                if (HttpHeaders.getContentLength(m, 0) > maxContentLength) {
+                    final ChannelFuture future = ctx.writeAndFlush(EXPECTATION_FAILED.duplicate().retain());
+                    future.addListener(new ChannelFutureListener() {
+                        @Override
+                        public void operationComplete(ChannelFuture future) throws Exception {
+                            if (!future.isSuccess()) {
+                                ctx.fireExceptionCaught(future.cause());
+                            }
+                        }
+                    });
+                    if (closeOnExpectationFailed) {
+                        future.addListener(ChannelFutureListener.CLOSE);
+                    }
+                    ctx.pipeline().fireUserEventTriggered(HttpExpectationFailedEvent.INSTANCE);
+                    return;
+                }
+                ctx.writeAndFlush(CONTINUE.duplicate().retain()).addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture future) throws Exception {
+                        if (!future.isSuccess()) {
+                            ctx.fireExceptionCaught(future.cause());
+                        }
+                    }
+                });
+            }
 
-    @Override
-    protected Object newContinueResponse(HttpMessage start, int maxContentLength, ChannelPipeline pipeline) {
-        Object response = continueResponse(start, maxContentLength, pipeline);
-        // we're going to respond based on the request expectation so there's no
-        // need to propagate the expectation further.
-        if (response != null) {
-            start.headers().remove(EXPECT);
-        }
-        return response;
-    }
+            if (!m.getDecoderResult().isSuccess()) {
+                removeTransferEncodingChunked(m);
+                out.add(toFullMessage(m));
+                return;
+            }
+            if (msg instanceof HttpRequest) {
+                HttpRequest header = (HttpRequest) msg;
+                currentMessage = new AggregatedFullHttpRequest(
+                        header, ctx.alloc().compositeBuffer(maxCumulationBufferComponents), null);
+            } else if (msg instanceof HttpResponse) {
+                HttpResponse header = (HttpResponse) msg;
+                currentMessage = new AggregatedFullHttpResponse(
+                        header, ctx.alloc().compositeBuffer(maxCumulationBufferComponents), null);
+            } else {
+                throw new Error();
+            }
 
-    @Override
-    protected boolean closeAfterContinueResponse(Object msg) {
-        return closeOnExpectationFailed && ignoreContentAfterContinueResponse(msg);
-    }
+            // A streamed message - initialize the cumulative buffer, and wait for incoming chunks.
+            removeTransferEncodingChunked(currentMessage);
+        } else if (msg instanceof HttpContent) {
+            if (currentMessage == null) {
+                // it is possible that a TooLongFrameException was already thrown but we can still discard data
+                // until the begging of the next request/response.
+                return;
+            }
 
-    @Override
-    protected boolean ignoreContentAfterContinueResponse(Object msg) {
-        if (msg instanceof HttpResponse) {
-            final HttpResponse httpResponse = (HttpResponse) msg;
-            return httpResponse.status().codeClass().equals(HttpStatusClass.CLIENT_ERROR);
-        }
-        return false;
-    }
+            // Merge the received chunk into the content of the current message.
+            HttpContent chunk = (HttpContent) msg;
+            CompositeByteBuf content = (CompositeByteBuf) currentMessage.content();
 
-    @Override
-    protected FullHttpMessage beginAggregation(HttpMessage start, ByteBuf content) throws Exception {
-        assert !(start instanceof FullHttpMessage);
+            if (content.readableBytes() > maxContentLength - chunk.content().readableBytes()) {
+                // release current message to prevent leaks
+                currentMessage.release();
+                currentMessage = null;
 
-        HttpUtil.setTransferEncodingChunked(start, false);
+                throw new TooLongFrameException(
+                        "HTTP content length exceeded " + maxContentLength +
+                        " bytes.");
+            }
 
-        AggregatedFullHttpMessage ret;
-        if (start instanceof HttpRequest) {
-            ret = new AggregatedFullHttpRequest((HttpRequest) start, content, null);
-        } else if (start instanceof HttpResponse) {
-            ret = new AggregatedFullHttpResponse((HttpResponse) start, content, null);
+            // Append the content of the chunk
+            if (chunk.content().isReadable()) {
+                content.addComponent(true, chunk.content().retain());
+            }
+
+            final boolean last;
+            if (!chunk.getDecoderResult().isSuccess()) {
+                currentMessage.setDecoderResult(
+                        DecoderResult.failure(chunk.getDecoderResult().cause()));
+                last = true;
+            } else {
+                last = chunk instanceof LastHttpContent;
+            }
+
+            if (last) {
+                // Merge trailing headers into the message.
+                if (chunk instanceof LastHttpContent) {
+                    LastHttpContent trailer = (LastHttpContent) chunk;
+                    currentMessage.setTrailingHeaders(trailer.trailingHeaders());
+                } else {
+                    currentMessage.setTrailingHeaders(new DefaultHttpHeaders());
+                }
+
+                // Set the 'Content-Length' header. If one isn't already set.
+                // This is important as HEAD responses will use a 'Content-Length' header which
+                // does not match the actual body, but the number of bytes that would be
+                // transmitted if a GET would have been used.
+                //
+                // See rfc2616 14.13 Content-Length
+                if (!isContentLengthSet(currentMessage)) {
+                    currentMessage.headers().set(
+                            Names.CONTENT_LENGTH,
+                            String.valueOf(content.readableBytes()));
+                }
+                // Set our currentMessage member variable to null in case adding to out will cause re-entry.
+                AggregatedFullHttpMessage currentMessage = this.currentMessage;
+                this.currentMessage = null;
+                out.add(currentMessage);
+            }
         } else {
             throw new Error();
         }
-        return ret;
     }
 
     @Override
-    protected void aggregate(FullHttpMessage aggregated, HttpContent content) throws Exception {
-        if (content instanceof LastHttpContent) {
-            // Merge trailing headers into the message.
-            ((AggregatedFullHttpMessage) aggregated).setTrailingHeaders(((LastHttpContent) content).trailingHeaders());
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        try {
+            super.channelInactive(ctx);
+        } finally {
+            // release current message if it is not null as it may be a left-over
+            releaseCurrentMessage();
         }
     }
 
     @Override
-    protected void finishAggregation(FullHttpMessage aggregated) throws Exception {
-        // Set the 'Content-Length' header. If one isn't already set.
-        // This is important as HEAD responses will use a 'Content-Length' header which
-        // does not match the actual body, but the number of bytes that would be
-        // transmitted if a GET would have been used.
-        //
-        // See rfc2616 14.13 Content-Length
-        if (!HttpUtil.isContentLengthSet(aggregated)) {
-            aggregated.headers().set(
-                    CONTENT_LENGTH,
-                    String.valueOf(aggregated.content().readableBytes()));
-        }
+    public void handlerAdded(ChannelHandlerContext ctx) throws Exception {
+        this.ctx = ctx;
     }
 
     @Override
-    protected void handleOversizedMessage(final ChannelHandlerContext ctx, HttpMessage oversized) throws Exception {
-        if (oversized instanceof HttpRequest) {
-            // send back a 413 and close the connection
+    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
+        try {
+            super.handlerRemoved(ctx);
+        } finally {
+            // release current message if it is not null as it may be a left-over as there is not much more we can do in
+            // this case
+            releaseCurrentMessage();
+        }
+    }
 
-            // If the client started to send data already, close because it's impossible to recover.
-            // If keep-alive is off and 'Expect: 100-continue' is missing, no need to leave the connection open.
-            if (oversized instanceof FullHttpMessage ||
-                !HttpUtil.is100ContinueExpected(oversized) && !HttpUtil.isKeepAlive(oversized)) {
-                ChannelFuture future = ctx.writeAndFlush(TOO_LARGE_CLOSE.retainedDuplicate());
-                future.addListener(new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(ChannelFuture future) throws Exception {
-                        if (!future.isSuccess()) {
-                            logger.debug("Failed to send a 413 Request Entity Too Large.", future.cause());
-                        }
-                        ctx.close();
-                    }
-                });
-            } else {
-                ctx.writeAndFlush(TOO_LARGE.retainedDuplicate()).addListener(new ChannelFutureListener() {
-                    @Override
-                    public void operationComplete(ChannelFuture future) throws Exception {
-                        if (!future.isSuccess()) {
-                            logger.debug("Failed to send a 413 Request Entity Too Large.", future.cause());
-                            ctx.close();
-                        }
-                    }
-                });
-            }
-        } else if (oversized instanceof HttpResponse) {
-            ctx.close();
-            throw new TooLongFrameException("Response entity too large: " + oversized);
+    private void releaseCurrentMessage() {
+        if (currentMessage != null) {
+            currentMessage.release();
+            currentMessage = null;
+        }
+    }
+
+    private static FullHttpMessage toFullMessage(HttpMessage msg) {
+        if (msg instanceof FullHttpMessage) {
+            return ((FullHttpMessage) msg).retain();
+        }
+
+        FullHttpMessage fullMsg;
+        if (msg instanceof HttpRequest) {
+            fullMsg = new AggregatedFullHttpRequest(
+                    (HttpRequest) msg, Unpooled.EMPTY_BUFFER, new DefaultHttpHeaders());
+        } else if (msg instanceof HttpResponse) {
+            fullMsg = new AggregatedFullHttpResponse(
+                    (HttpResponse) msg, Unpooled.EMPTY_BUFFER, new DefaultHttpHeaders());
         } else {
             throw new IllegalStateException();
         }
+
+        return fullMsg;
     }
 
-    private abstract static class AggregatedFullHttpMessage implements FullHttpMessage {
+    private abstract static class AggregatedFullHttpMessage implements ByteBufHolder, FullHttpMessage {
         protected final HttpMessage message;
         private final ByteBuf content;
         private HttpHeaders trailingHeaders;
@@ -294,7 +354,7 @@ public class HttpObjectAggregator
         public HttpHeaders trailingHeaders() {
             HttpHeaders trailingHeaders = this.trailingHeaders;
             if (trailingHeaders == null) {
-                return EmptyHttpHeaders.INSTANCE;
+                return HttpHeaders.EMPTY_HEADERS;
             } else {
                 return trailingHeaders;
             }
@@ -306,12 +366,7 @@ public class HttpObjectAggregator
 
         @Override
         public HttpVersion getProtocolVersion() {
-            return message.protocolVersion();
-        }
-
-        @Override
-        public HttpVersion protocolVersion() {
-            return message.protocolVersion();
+            return message.getProtocolVersion();
         }
 
         @Override
@@ -326,13 +381,8 @@ public class HttpObjectAggregator
         }
 
         @Override
-        public DecoderResult decoderResult() {
-            return message.decoderResult();
-        }
-
-        @Override
         public DecoderResult getDecoderResult() {
-            return message.decoderResult();
+            return message.getDecoderResult();
         }
 
         @Override
@@ -363,18 +413,6 @@ public class HttpObjectAggregator
         }
 
         @Override
-        public FullHttpMessage touch(Object hint) {
-            content.touch(hint);
-            return this;
-        }
-
-        @Override
-        public FullHttpMessage touch() {
-            content.touch();
-            return this;
-        }
-
-        @Override
         public boolean release() {
             return content.release();
         }
@@ -389,9 +427,6 @@ public class HttpObjectAggregator
 
         @Override
         public abstract FullHttpMessage duplicate();
-
-        @Override
-        public abstract FullHttpMessage retainedDuplicate();
     }
 
     private static final class AggregatedFullHttpRequest extends AggregatedFullHttpMessage implements FullHttpRequest {
@@ -402,25 +437,20 @@ public class HttpObjectAggregator
 
         @Override
         public FullHttpRequest copy() {
-            return replace(content().copy());
+            DefaultFullHttpRequest copy = new DefaultFullHttpRequest(
+                    getProtocolVersion(), getMethod(), getUri(), content().copy());
+            copy.headers().set(headers());
+            copy.trailingHeaders().set(trailingHeaders());
+            return copy;
         }
 
         @Override
         public FullHttpRequest duplicate() {
-            return replace(content().duplicate());
-        }
-
-        @Override
-        public FullHttpRequest retainedDuplicate() {
-            return replace(content().retainedDuplicate());
-        }
-
-        @Override
-        public FullHttpRequest replace(ByteBuf content) {
-            DefaultFullHttpRequest dup = new DefaultFullHttpRequest(protocolVersion(), method(), uri(), content,
-                    headers().copy(), trailingHeaders().copy());
-            dup.setDecoderResult(decoderResult());
-            return dup;
+            DefaultFullHttpRequest duplicate = new DefaultFullHttpRequest(
+                    getProtocolVersion(), getMethod(), getUri(), content().duplicate());
+            duplicate.headers().set(headers());
+            duplicate.trailingHeaders().set(trailingHeaders());
+            return duplicate;
         }
 
         @Override
@@ -432,18 +462,6 @@ public class HttpObjectAggregator
         @Override
         public FullHttpRequest retain() {
             super.retain();
-            return this;
-        }
-
-        @Override
-        public FullHttpRequest touch() {
-            super.touch();
-            return this;
-        }
-
-        @Override
-        public FullHttpRequest touch(Object hint) {
-            super.touch(hint);
             return this;
         }
 
@@ -461,22 +479,12 @@ public class HttpObjectAggregator
 
         @Override
         public HttpMethod getMethod() {
-            return ((HttpRequest) message).method();
+            return ((HttpRequest) message).getMethod();
         }
 
         @Override
         public String getUri() {
-            return ((HttpRequest) message).uri();
-        }
-
-        @Override
-        public HttpMethod method() {
-            return getMethod();
-        }
-
-        @Override
-        public String uri() {
-            return getUri();
+            return ((HttpRequest) message).getUri();
         }
 
         @Override
@@ -500,25 +508,20 @@ public class HttpObjectAggregator
 
         @Override
         public FullHttpResponse copy() {
-            return replace(content().copy());
+            DefaultFullHttpResponse copy = new DefaultFullHttpResponse(
+                    getProtocolVersion(), getStatus(), content().copy());
+            copy.headers().set(headers());
+            copy.trailingHeaders().set(trailingHeaders());
+            return copy;
         }
 
         @Override
         public FullHttpResponse duplicate() {
-            return replace(content().duplicate());
-        }
-
-        @Override
-        public FullHttpResponse retainedDuplicate() {
-            return replace(content().retainedDuplicate());
-        }
-
-        @Override
-        public FullHttpResponse replace(ByteBuf content) {
-            DefaultFullHttpResponse dup = new DefaultFullHttpResponse(getProtocolVersion(), getStatus(), content,
-                    headers().copy(), trailingHeaders().copy());
-            dup.setDecoderResult(decoderResult());
-            return dup;
+            DefaultFullHttpResponse duplicate = new DefaultFullHttpResponse(getProtocolVersion(), getStatus(),
+                    content().duplicate());
+            duplicate.headers().set(headers());
+            duplicate.trailingHeaders().set(trailingHeaders());
+            return duplicate;
         }
 
         @Override
@@ -529,12 +532,7 @@ public class HttpObjectAggregator
 
         @Override
         public HttpResponseStatus getStatus() {
-            return ((HttpResponse) message).status();
-        }
-
-        @Override
-        public HttpResponseStatus status() {
-            return getStatus();
+            return ((HttpResponse) message).getStatus();
         }
 
         @Override
@@ -552,18 +550,6 @@ public class HttpObjectAggregator
         @Override
         public FullHttpResponse retain() {
             super.retain();
-            return this;
-        }
-
-        @Override
-        public FullHttpResponse touch(Object hint) {
-            super.touch(hint);
-            return this;
-        }
-
-        @Override
-        public FullHttpResponse touch() {
-            super.touch();
             return this;
         }
 

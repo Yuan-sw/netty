@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.spdy.SpdyHttpHeaders;
-import io.netty.handler.codec.spdy.SpdyHttpHeaders.Names;
 
 /**
  * Adds a unique client stream ID to the SPDY header. Client stream IDs MUST be odd.
@@ -38,7 +37,7 @@ public class SpdyClientStreamIdHandler extends ChannelOutboundHandlerAdapter {
         if (acceptOutboundMessage(msg)) {
             HttpMessage httpMsg = (HttpMessage) msg;
             if (!httpMsg.headers().contains(SpdyHttpHeaders.Names.STREAM_ID)) {
-                httpMsg.headers().setInt(Names.STREAM_ID, currentStreamId);
+                SpdyHttpHeaders.setStreamId(httpMsg, currentStreamId);
                 // Client stream IDs are always odd
                 currentStreamId += 2;
             }

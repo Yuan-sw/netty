@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,24 +15,6 @@
  */
 package io.netty.channel.embedded;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.nio.channels.ClosedChannelException;
-import java.util.ArrayDeque;
-import java.util.Queue;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicReference;
-
-import org.junit.Test;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -41,29 +23,31 @@ import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerAdapter;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelId;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.FutureListener;
 import io.netty.util.concurrent.ScheduledFuture;
+import org.junit.Test;
+
+import java.util.ArrayDeque;
+import java.util.Queue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 public class EmbeddedChannelTest {
-
-    @Test
-    public void testParent() {
-        EmbeddedChannel parent = new EmbeddedChannel();
-        EmbeddedChannel channel = new EmbeddedChannel(parent, EmbeddedChannelId.INSTANCE, true, false);
-        assertSame(parent, channel.parent());
-        assertNull(parent.parent());
-
-        assertFalse(channel.finish());
-        assertFalse(parent.finish());
-    }
 
     @Test
     public void testNotRegistered() throws Exception {
@@ -201,13 +185,6 @@ public class EmbeddedChannelTest {
         assertNull(channel.readOutbound());
     }
 
-    @Test
-    public void testConstructWithChannelId() {
-        ChannelId channelId = new CustomChannelId(1);
-        EmbeddedChannel channel = new EmbeddedChannel(channelId);
-        assertSame(channelId, channel.id());
-    }
-
     // See https://github.com/netty/netty/issues/4316.
     @Test(timeout = 2000)
     public void testFireChannelInactiveAndUnregisteredOnClose() throws InterruptedException {
@@ -293,17 +270,6 @@ public class EmbeddedChannelTest {
     }
 
     @Test
-    public void testHasNoDisconnectSkipDisconnect() throws InterruptedException {
-        EmbeddedChannel channel = new EmbeddedChannel(false, new ChannelOutboundHandlerAdapter() {
-            @Override
-            public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
-                promise.tryFailure(new Throwable());
-            }
-        });
-        assertFalse(channel.disconnect().isSuccess());
-    }
-
-    @Test
     public void testFinishAndReleaseAll() {
         ByteBuf in = Unpooled.buffer();
         ByteBuf out = Unpooled.buffer();
@@ -345,7 +311,7 @@ public class EmbeddedChannelTest {
             assertTrue(channel.finish());
             assertNull(channel.readInbound());
 
-            ByteBuf buffer = channel.readOutbound();
+            ByteBuf buffer = (ByteBuf) channel.readOutbound();
             assertSame(out, buffer);
             buffer.release();
 
@@ -374,7 +340,7 @@ public class EmbeddedChannelTest {
             assertTrue(channel.finish());
             assertNull(channel.readOutbound());
 
-            ByteBuf buffer = channel.readInbound();
+            ByteBuf buffer = (ByteBuf) channel.readInbound();
             assertSame(in, buffer);
             buffer.release();
 
@@ -428,162 +394,6 @@ public class EmbeddedChannelTest {
         assertTrue(channel.finish());
         assertSame(msg, channel.readOutbound());
         assertNull(channel.readOutbound());
-    }
-
-    @Test
-    public void testFlushInbound() throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-        EmbeddedChannel channel = new EmbeddedChannel(new ChannelInboundHandlerAdapter() {
-            @Override
-            public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-              latch.countDown();
-            }
-        });
-
-        channel.flushInbound();
-
-        if (!latch.await(1L, TimeUnit.SECONDS)) {
-            fail("Nobody called #channelReadComplete() in time.");
-        }
-    }
-
-    @Test
-    public void testWriteOneInbound() throws InterruptedException {
-      final CountDownLatch latch = new CountDownLatch(1);
-      final AtomicInteger flushCount = new AtomicInteger(0);
-
-      EmbeddedChannel channel = new EmbeddedChannel(new ChannelInboundHandlerAdapter() {
-          @Override
-          public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-              ReferenceCountUtil.release(msg);
-              latch.countDown();
-          }
-
-          @Override
-          public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
-              flushCount.incrementAndGet();
-          }
-      });
-
-      channel.writeOneInbound("Hello, Netty!");
-
-      if (!latch.await(1L, TimeUnit.SECONDS)) {
-          fail("Nobody called #channelRead() in time.");
-      }
-
-      channel.close().syncUninterruptibly();
-
-      // There was no #flushInbound() call so nobody should have called
-      // #channelReadComplete()
-      assertEquals(0, flushCount.get());
-    }
-
-    @Test
-    public void testFlushOutbound() throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-        EmbeddedChannel channel = new EmbeddedChannel(new ChannelOutboundHandlerAdapter() {
-            @Override
-            public void flush(ChannelHandlerContext ctx) throws Exception {
-                latch.countDown();
-            }
-        });
-
-        channel.flushOutbound();
-
-        if (!latch.await(1L, TimeUnit.SECONDS)) {
-            fail("Nobody called #flush() in time.");
-        }
-    }
-
-    @Test
-    public void testWriteOneOutbound() throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicInteger flushCount = new AtomicInteger(0);
-
-        EmbeddedChannel channel = new EmbeddedChannel(new ChannelOutboundHandlerAdapter() {
-            @Override
-            public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-                ctx.write(msg, promise);
-                latch.countDown();
-            }
-
-            @Override
-            public void flush(ChannelHandlerContext ctx) throws Exception {
-                flushCount.incrementAndGet();
-            }
-        });
-
-        // This shouldn't trigger a #flush()
-        channel.writeOneOutbound("Hello, Netty!");
-
-        if (!latch.await(1L, TimeUnit.SECONDS)) {
-            fail("Nobody called #write() in time.");
-        }
-
-        channel.close().syncUninterruptibly();
-
-        // There was no #flushOutbound() call so nobody should have called #flush()
-        assertEquals(0, flushCount.get());
-    }
-
-    @Test
-    public void testEnsureOpen() throws InterruptedException {
-        EmbeddedChannel channel = new EmbeddedChannel();
-        channel.close().syncUninterruptibly();
-
-        try {
-            channel.writeOutbound("Hello, Netty!");
-            fail("This should have failed with a ClosedChannelException");
-        } catch (Exception expected) {
-            assertTrue(expected instanceof ClosedChannelException);
-        }
-
-        try {
-            channel.writeInbound("Hello, Netty!");
-            fail("This should have failed with a ClosedChannelException");
-        } catch (Exception expected) {
-            assertTrue(expected instanceof ClosedChannelException);
-        }
-    }
-
-    @Test
-    public void testHandleInboundMessage() throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-
-        EmbeddedChannel channel = new EmbeddedChannel() {
-            @Override
-            protected void handleInboundMessage(Object msg) {
-                latch.countDown();
-            }
-        };
-
-        channel.writeOneInbound("Hello, Netty!");
-
-        if (!latch.await(1L, TimeUnit.SECONDS)) {
-            fail("Nobody called #handleInboundMessage() in time.");
-        }
-    }
-
-    @Test
-    public void testHandleOutboundMessage() throws InterruptedException {
-        final CountDownLatch latch = new CountDownLatch(1);
-
-        EmbeddedChannel channel = new EmbeddedChannel() {
-            @Override
-            protected void handleOutboundMessage(Object msg) {
-                latch.countDown();
-            }
-        };
-
-        channel.writeOneOutbound("Hello, Netty!");
-        if (latch.await(50L, TimeUnit.MILLISECONDS)) {
-            fail("Somebody called unexpectedly #flush()");
-        }
-
-        channel.flushOutbound();
-        if (!latch.await(1L, TimeUnit.SECONDS)) {
-            fail("Nobody called #handleOutboundMessage() in time.");
-        }
     }
 
     @Test(timeout = 5000)

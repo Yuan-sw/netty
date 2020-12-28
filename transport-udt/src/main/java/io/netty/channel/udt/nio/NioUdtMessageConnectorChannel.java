@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -28,6 +28,7 @@ import io.netty.channel.udt.DefaultUdtChannelConfig;
 import io.netty.channel.udt.UdtChannel;
 import io.netty.channel.udt.UdtChannelConfig;
 import io.netty.channel.udt.UdtMessage;
+import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -55,6 +56,7 @@ public class NioUdtMessageConnectorChannel extends AbstractNioMessageChannel imp
             InternalLoggerFactory.getInstance(NioUdtMessageConnectorChannel.class);
 
     private static final ChannelMetadata METADATA = new ChannelMetadata(false);
+    private static final String EXPECTED_TYPE = " (expected: " + StringUtil.simpleClassName(UdtMessage.class) + ')';
 
     private final UdtChannelConfig config;
 
@@ -79,7 +81,9 @@ public class NioUdtMessageConnectorChannel extends AbstractNioMessageChannel imp
             try {
                 channelUDT.close();
             } catch (final Exception e2) {
-                logger.warn("Failed to close channel.", e2);
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Failed to close channel.", e2);
+                }
             }
             throw new ChannelException("Failed to configure channel.", e);
         }
@@ -198,6 +202,16 @@ public class NioUdtMessageConnectorChannel extends AbstractNioMessageChannel imp
         }
 
         return writtenBytes > 0;
+    }
+
+    @Override
+    protected final Object filterOutboundMessage(Object msg) throws Exception {
+        if (msg instanceof UdtMessage) {
+            return msg;
+        }
+
+        throw new UnsupportedOperationException(
+                "unsupported message type: " + StringUtil.simpleClassName(msg) + EXPECTED_TYPE);
     }
 
     @Override

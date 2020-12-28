@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,16 +16,10 @@
 package io.netty.handler.codec.haproxy;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufProcessor;
 import io.netty.handler.codec.haproxy.HAProxyProxiedProtocol.AddressFamily;
-import io.netty.util.AbstractReferenceCounted;
-import io.netty.util.ByteProcessor;
 import io.netty.util.CharsetUtil;
 import io.netty.util.NetUtil;
-import io.netty.util.ResourceLeakDetector;
-import io.netty.util.ResourceLeakDetectorFactory;
-import io.netty.util.ResourceLeakTracker;
-import io.netty.util.internal.ObjectUtil;
-import io.netty.util.internal.StringUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,11 +28,29 @@ import java.util.List;
 /**
  * Message container for decoded HAProxy proxy protocol parameters
  */
-public final class HAProxyMessage extends AbstractReferenceCounted {
-    private static final ResourceLeakDetector<HAProxyMessage> leakDetector =
-            ResourceLeakDetectorFactory.instance().newResourceLeakDetector(HAProxyMessage.class);
+public final class HAProxyMessage {
 
-    private final ResourceLeakTracker<HAProxyMessage> leak;
+    /**
+     * Version 1 proxy protocol message for 'UNKNOWN' proxied protocols. Per spec, when the proxied protocol is
+     * 'UNKNOWN' we must discard all other header values.
+     */
+    private static final HAProxyMessage V1_UNKNOWN_MSG = new HAProxyMessage(
+            HAProxyProtocolVersion.V1, HAProxyCommand.PROXY, HAProxyProxiedProtocol.UNKNOWN, null, null, 0, 0);
+
+    /**
+     * Version 2 proxy protocol message for 'UNKNOWN' proxied protocols. Per spec, when the proxied protocol is
+     * 'UNKNOWN' we must discard all other header values.
+     */
+    private static final HAProxyMessage V2_UNKNOWN_MSG = new HAProxyMessage(
+            HAProxyProtocolVersion.V2, HAProxyCommand.PROXY, HAProxyProxiedProtocol.UNKNOWN, null, null, 0, 0);
+
+    /**
+     * Version 2 proxy protocol message for local requests. Per spec, we should use an unspecified protocol and family
+     * for 'LOCAL' commands. Per spec, when the proxied protocol is 'UNKNOWN' we must discard all other header values.
+     */
+    private static final HAProxyMessage V2_LOCAL_MSG = new HAProxyMessage(
+            HAProxyProtocolVersion.V2, HAProxyCommand.LOCAL, HAProxyProxiedProtocol.UNKNOWN, null, null, 0, 0);
+
     private final HAProxyProtocolVersion protocolVersion;
     private final HAProxyCommand command;
     private final HAProxyProxiedProtocol proxiedProtocol;
@@ -60,16 +72,9 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
     }
 
     /**
-     * Creates a new instance of HAProxyMessage.
-     * @param protocolVersion the protocol version.
-     * @param command the command.
-     * @param proxiedProtocol the protocol containing the address family and transport protocol.
-     * @param sourceAddress the source address.
-     * @param destinationAddress the destination address.
-     * @param sourcePort the source port. This value must be 0 for unix, unspec addresses.
-     * @param destinationPort the destination port. This value must be 0 for unix, unspec addresses.
+     * Creates a new instance
      */
-    public HAProxyMessage(
+    private HAProxyMessage(
             HAProxyProtocolVersion protocolVersion, HAProxyCommand command, HAProxyProxiedProtocol proxiedProtocol,
             String sourceAddress, String destinationAddress, int sourcePort, int destinationPort) {
 
@@ -78,30 +83,22 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
     }
 
     /**
-     * Creates a new instance of HAProxyMessage.
-     * @param protocolVersion the protocol version.
-     * @param command the command.
-     * @param proxiedProtocol the protocol containing the address family and transport protocol.
-     * @param sourceAddress the source address.
-     * @param destinationAddress the destination address.
-     * @param sourcePort the source port. This value must be 0 for unix, unspec addresses.
-     * @param destinationPort the destination port. This value must be 0 for unix, unspec addresses.
-     * @param tlvs the list of tlvs.
+     * Creates a new instance
      */
-    public HAProxyMessage(
+    private HAProxyMessage(
             HAProxyProtocolVersion protocolVersion, HAProxyCommand command, HAProxyProxiedProtocol proxiedProtocol,
             String sourceAddress, String destinationAddress, int sourcePort, int destinationPort,
-            List<? extends HAProxyTLV> tlvs) {
+            List<HAProxyTLV> tlvs) {
 
-        ObjectUtil.checkNotNull(protocolVersion, "protocolVersion");
-        ObjectUtil.checkNotNull(proxiedProtocol, "proxiedProtocol");
-        ObjectUtil.checkNotNull(tlvs, "tlvs");
+        if (proxiedProtocol == null) {
+            throw new NullPointerException("proxiedProtocol");
+        }
         AddressFamily addrFamily = proxiedProtocol.addressFamily();
 
         checkAddress(sourceAddress, addrFamily);
         checkAddress(destinationAddress, addrFamily);
-        checkPort(sourcePort, addrFamily);
-        checkPort(destinationPort, addrFamily);
+        checkPort(sourcePort);
+        checkPort(destinationPort);
 
         this.protocolVersion = protocolVersion;
         this.command = command;
@@ -111,8 +108,6 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
         this.sourcePort = sourcePort;
         this.destinationPort = destinationPort;
         this.tlvs = Collections.unmodifiableList(tlvs);
-
-        leak = leakDetector.track(this);
     }
 
     /**
@@ -123,7 +118,9 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
      * @throws HAProxyProtocolException  if any portion of the header is invalid
      */
     static HAProxyMessage decodeHeader(ByteBuf header) {
-        ObjectUtil.checkNotNull(header, "header");
+        if (header == null) {
+            throw new NullPointerException("header");
+        }
 
         if (header.readableBytes() < 16) {
             throw new HAProxyProtocolException(
@@ -153,7 +150,7 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
         }
 
         if (cmd == HAProxyCommand.LOCAL) {
-            return unknownMsg(HAProxyProtocolVersion.V2, HAProxyCommand.LOCAL);
+            return V2_LOCAL_MSG;
         }
 
         // Per spec, the 14th byte is the protocol and address family byte
@@ -165,7 +162,7 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
         }
 
         if (protAndFam == HAProxyProxiedProtocol.UNKNOWN) {
-            return unknownMsg(HAProxyProtocolVersion.V2, HAProxyCommand.PROXY);
+            return V2_UNKNOWN_MSG;
         }
 
         int addressInfoLen = header.readUnsignedShort();
@@ -186,7 +183,7 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
                             Math.min(addressInfoLen, header.readableBytes()) + " bytes (expected: 216+ bytes)");
             }
             int startIdx = header.readerIndex();
-            int addressEnd = header.forEachByte(startIdx, 108, ByteProcessor.FIND_NUL);
+            int addressEnd = header.forEachByte(startIdx, 108, ByteBufProcessor.FIND_NUL);
             if (addressEnd == -1) {
                 addressLen = 108;
             } else {
@@ -196,7 +193,7 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
 
             startIdx += 108;
 
-            addressEnd = header.forEachByte(startIdx, 108, ByteProcessor.FIND_NUL);
+            addressEnd = header.forEachByte(startIdx, 108, ByteBufProcessor.FIND_NUL);
             if (addressEnd == -1) {
                 addressLen = 108;
             } else {
@@ -270,7 +267,7 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
         final int length = header.readUnsignedShort();
         switch (type) {
         case PP2_TYPE_SSL:
-            final ByteBuf rawContent = header.retainedSlice(header.readerIndex(), length);
+            final ByteBuf rawContent = header.slice(header.readerIndex(), length).retain();
             final ByteBuf byteBuf = header.readSlice(length);
             final byte client = byteBuf.readByte();
             final int verify = byteBuf.readInt();
@@ -289,14 +286,14 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
                 return new HAProxySSLTLV(verify, client, encapsulatedTlvs, rawContent);
             }
             return new HAProxySSLTLV(verify, client, Collections.<HAProxyTLV>emptyList(), rawContent);
-        // If we're not dealing with an SSL Type, we can use the same mechanism
+        // If we're not dealing with a SSL Type, we can use the same mechanism
         case PP2_TYPE_ALPN:
         case PP2_TYPE_AUTHORITY:
         case PP2_TYPE_SSL_VERSION:
         case PP2_TYPE_SSL_CN:
         case PP2_TYPE_NETNS:
         case OTHER:
-            return new HAProxyTLV(type, typeAsByte, header.readRetainedSlice(length));
+            return new HAProxyTLV(type, typeAsByte, header.readSlice(length).retain());
         default:
             return null;
         }
@@ -340,28 +337,16 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
         }
 
         if (protAndFam == HAProxyProxiedProtocol.UNKNOWN) {
-            return unknownMsg(HAProxyProtocolVersion.V1, HAProxyCommand.PROXY);
+            return V1_UNKNOWN_MSG;
         }
 
         if (numParts != 6) {
             throw new HAProxyProtocolException("invalid TCP4/6 header: " + header + " (expected: 6 parts)");
         }
 
-        try {
-            return new HAProxyMessage(
-                    HAProxyProtocolVersion.V1, HAProxyCommand.PROXY,
-                    protAndFam, parts[2], parts[3], parts[4], parts[5]);
-        } catch (RuntimeException e) {
-            throw new HAProxyProtocolException("invalid HAProxy message", e);
-        }
-    }
-
-    /**
-     * Proxy protocol message for 'UNKNOWN' proxied protocols. Per spec, when the proxied protocol is
-     * 'UNKNOWN' we must discard all other header values.
-     */
-    private static HAProxyMessage unknownMsg(HAProxyProtocolVersion version, HAProxyCommand command) {
-        return new HAProxyMessage(version, command, HAProxyProxiedProtocol.UNKNOWN, null, null, 0, 0);
+        return new HAProxyMessage(
+                HAProxyProtocolVersion.V1, HAProxyCommand.PROXY,
+                protAndFam, parts[2], parts[3], parts[4], parts[5]);
     }
 
     /**
@@ -373,20 +358,31 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
      */
     private static String ipBytesToString(ByteBuf header, int addressLen) {
         StringBuilder sb = new StringBuilder();
-        final int ipv4Len = 4;
-        final int ipv6Len = 8;
-        if (addressLen == ipv4Len) {
-            for (int i = 0; i < ipv4Len; i++) {
-                sb.append(header.readByte() & 0xff);
-                sb.append('.');
-            }
+        if (addressLen == 4) {
+            sb.append(header.readByte() & 0xff);
+            sb.append('.');
+            sb.append(header.readByte() & 0xff);
+            sb.append('.');
+            sb.append(header.readByte() & 0xff);
+            sb.append('.');
+            sb.append(header.readByte() & 0xff);
         } else {
-            for (int i = 0; i < ipv6Len; i++) {
-                sb.append(Integer.toHexString(header.readUnsignedShort()));
-                sb.append(':');
-            }
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
+            sb.append(':');
+            sb.append(Integer.toHexString(header.readUnsignedShort()));
         }
-        sb.setLength(sb.length() - 1);
         return sb.toString();
     }
 
@@ -395,18 +391,18 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
      *
      * @param value                      the port
      * @return                           port as an integer
-     * @throws IllegalArgumentException  if port is not a valid integer
+     * @throws HAProxyProtocolException  if port is not a valid integer
      */
     private static int portStringToInt(String value) {
         int port;
         try {
             port = Integer.parseInt(value);
         } catch (NumberFormatException e) {
-            throw new IllegalArgumentException("invalid port: " + value, e);
+            throw new HAProxyProtocolException("invalid port: " + value, e);
         }
 
         if (port <= 0 || port > 65535) {
-            throw new IllegalArgumentException("invalid port: " + value + " (expected: 1 ~ 65535)");
+            throw new HAProxyProtocolException("invalid port: " + value + " (expected: 1 ~ 65535)");
         }
 
         return port;
@@ -417,65 +413,52 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
      *
      * @param address                    human-readable address
      * @param addrFamily                 the {@link AddressFamily} to check the address against
-     * @throws IllegalArgumentException  if the address is invalid
+     * @throws HAProxyProtocolException  if the address is invalid
      */
     private static void checkAddress(String address, AddressFamily addrFamily) {
-        ObjectUtil.checkNotNull(addrFamily, "addrFamily");
+        if (addrFamily == null) {
+            throw new NullPointerException("addrFamily");
+        }
 
         switch (addrFamily) {
             case AF_UNSPEC:
                 if (address != null) {
-                    throw new IllegalArgumentException("unable to validate an AF_UNSPEC address: " + address);
+                    throw new HAProxyProtocolException("unable to validate an AF_UNSPEC address: " + address);
                 }
                 return;
             case AF_UNIX:
-                ObjectUtil.checkNotNull(address, "address");
-                if (address.getBytes(CharsetUtil.US_ASCII).length > 108) {
-                    throw new IllegalArgumentException("invalid AF_UNIX address: " + address);
-                }
                 return;
         }
 
-        ObjectUtil.checkNotNull(address, "address");
+        if (address == null) {
+            throw new NullPointerException("address");
+        }
 
         switch (addrFamily) {
             case AF_IPv4:
                 if (!NetUtil.isValidIpV4Address(address)) {
-                    throw new IllegalArgumentException("invalid IPv4 address: " + address);
+                    throw new HAProxyProtocolException("invalid IPv4 address: " + address);
                 }
                 break;
             case AF_IPv6:
                 if (!NetUtil.isValidIpV6Address(address)) {
-                    throw new IllegalArgumentException("invalid IPv6 address: " + address);
+                    throw new HAProxyProtocolException("invalid IPv6 address: " + address);
                 }
                 break;
             default:
-                throw new IllegalArgumentException("unexpected addrFamily: " + addrFamily);
+                throw new Error();
         }
     }
 
     /**
-     * Validate the port depending on the addrFamily.
+     * Validate a UDP/TCP port
      *
      * @param port                       the UDP/TCP port
-     * @throws IllegalArgumentException  if the port is out of range (0-65535 inclusive)
+     * @throws HAProxyProtocolException  if the port is out of range (0-65535 inclusive)
      */
-    private static void checkPort(int port, AddressFamily addrFamily) {
-        switch (addrFamily) {
-        case AF_IPv6:
-        case AF_IPv4:
-            if (port < 0 || port > 65535) {
-                throw new IllegalArgumentException("invalid port: " + port + " (expected: 0 ~ 65535)");
-            }
-            break;
-        case AF_UNIX:
-        case AF_UNSPEC:
-            if (port != 0) {
-                throw new IllegalArgumentException("port cannot be specified with addrFamily: " + addrFamily);
-            }
-            break;
-        default:
-            throw new IllegalArgumentException("unexpected addrFamily: " + addrFamily);
+    private static void checkPort(int port) {
+        if (port < 0 || port > 65535) {
+            throw new HAProxyProtocolException("invalid port: " + port + " (expected: 1 ~ 65535)");
         }
     }
 
@@ -535,94 +518,5 @@ public final class HAProxyMessage extends AbstractReferenceCounted {
      */
     public List<HAProxyTLV> tlvs() {
         return tlvs;
-    }
-
-    int tlvNumBytes() {
-        int tlvNumBytes = 0;
-        for (int i = 0; i < tlvs.size(); i++) {
-            tlvNumBytes += tlvs.get(i).totalNumBytes();
-        }
-        return tlvNumBytes;
-    }
-
-    @Override
-    public HAProxyMessage touch() {
-        tryRecord();
-        return (HAProxyMessage) super.touch();
-    }
-
-    @Override
-    public HAProxyMessage touch(Object hint) {
-        if (leak != null) {
-            leak.record(hint);
-        }
-        return this;
-    }
-
-    @Override
-    public HAProxyMessage retain() {
-        tryRecord();
-        return (HAProxyMessage) super.retain();
-    }
-
-    @Override
-    public HAProxyMessage retain(int increment) {
-        tryRecord();
-        return (HAProxyMessage) super.retain(increment);
-    }
-
-    @Override
-    public boolean release() {
-        tryRecord();
-        return super.release();
-    }
-
-    @Override
-    public boolean release(int decrement) {
-        tryRecord();
-        return super.release(decrement);
-    }
-
-    private void tryRecord() {
-        if (leak != null) {
-            leak.record();
-        }
-    }
-
-    @Override
-    protected void deallocate() {
-        try {
-            for (HAProxyTLV tlv : tlvs) {
-                tlv.release();
-            }
-        } finally {
-            final ResourceLeakTracker<HAProxyMessage> leak = this.leak;
-            if (leak != null) {
-                boolean closed = leak.close(this);
-                assert closed;
-            }
-        }
-    }
-
-    @Override
-    public String toString() {
-        StringBuilder sb = new StringBuilder(256)
-                .append(StringUtil.simpleClassName(this))
-                .append("(protocolVersion: ").append(protocolVersion)
-                .append(", command: ").append(command)
-                .append(", proxiedProtocol: ").append(proxiedProtocol)
-                .append(", sourceAddress: ").append(sourceAddress)
-                .append(", destinationAddress: ").append(destinationAddress)
-                .append(", sourcePort: ").append(sourcePort)
-                .append(", destinationPort: ").append(destinationPort)
-                .append(", tlvs: [");
-        if (!tlvs.isEmpty()) {
-            for (HAProxyTLV tlv: tlvs) {
-                sb.append(tlv).append(", ");
-            }
-            sb.setLength(sb.length() - 2);
-        }
-        sb.append("])");
-        return sb.toString();
     }
 }

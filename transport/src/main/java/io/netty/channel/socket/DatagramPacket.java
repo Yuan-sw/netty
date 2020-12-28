@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -44,22 +44,12 @@ public final class DatagramPacket
 
     @Override
     public DatagramPacket copy() {
-        return replace(content().copy());
+        return new DatagramPacket(content().copy(), recipient(), sender());
     }
 
     @Override
     public DatagramPacket duplicate() {
-        return replace(content().duplicate());
-    }
-
-    @Override
-    public DatagramPacket retainedDuplicate() {
-        return replace(content().retainedDuplicate());
-    }
-
-    @Override
-    public DatagramPacket replace(ByteBuf content) {
-        return new DatagramPacket(content, recipient(), sender());
+        return new DatagramPacket(content().duplicate(), recipient(), sender());
     }
 
     @Override
@@ -71,18 +61,6 @@ public final class DatagramPacket
     @Override
     public DatagramPacket retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public DatagramPacket touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public DatagramPacket touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

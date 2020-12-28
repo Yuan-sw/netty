@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -30,8 +30,8 @@ import java.util.concurrent.TimeUnit;
 public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<EventExecutor> {
 
     /**
-     * Returns {@code true} if and only if all {@link EventExecutor}s managed by this {@link EventExecutorGroup}
-     * are being {@linkplain #shutdownGracefully() shut down gracefully} or was {@linkplain #isShutdown() shut down}.
+     * Returns {@code true} if and only if this executor was started to be
+     * {@linkplain #shutdownGracefully() shut down gracefuclly} or was {@linkplain #isShutdown() shut down}.
      */
     boolean isShuttingDown();
 
@@ -59,8 +59,7 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
     Future<?> shutdownGracefully(long quietPeriod, long timeout, TimeUnit unit);
 
     /**
-     * Returns the {@link Future} which is notified when all {@link EventExecutor}s managed by this
-     * {@link EventExecutorGroup} have been terminated.
+     * Returns the {@link Future} which is notified when this executor has been terminated.
      */
     Future<?> terminationFuture();
 
@@ -79,10 +78,14 @@ public interface EventExecutorGroup extends ScheduledExecutorService, Iterable<E
     List<Runnable> shutdownNow();
 
     /**
-     * Returns one of the {@link EventExecutor}s managed by this {@link EventExecutorGroup}.
+     * Returns one of the {@link EventExecutor}s that belong to this group.
      */
     EventExecutor next();
 
+    /**
+     * Returns a read-only {@link Iterator} over all {@link EventExecutor}, which are handled by this
+     * {@link EventExecutorGroup} at the time of invoke this method.
+     */
     @Override
     Iterator<EventExecutor> iterator();
 

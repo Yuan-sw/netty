@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 
 import java.net.ServerSocket;
 import java.net.StandardSocketOptions;
@@ -89,7 +88,6 @@ public interface ServerSocketChannelConfig extends ChannelConfig {
     ServerSocketChannelConfig setConnectTimeoutMillis(int connectTimeoutMillis);
 
     @Override
-    @Deprecated
     ServerSocketChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead);
 
     @Override
@@ -106,14 +104,4 @@ public interface ServerSocketChannelConfig extends ChannelConfig {
 
     @Override
     ServerSocketChannelConfig setMessageSizeEstimator(MessageSizeEstimator estimator);
-
-    @Override
-    ServerSocketChannelConfig setWriteBufferHighWaterMark(int writeBufferHighWaterMark);
-
-    @Override
-    ServerSocketChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark);
-
-    @Override
-    ServerSocketChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark);
-
 }

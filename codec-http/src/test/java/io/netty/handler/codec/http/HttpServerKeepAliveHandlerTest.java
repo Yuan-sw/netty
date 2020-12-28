@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -27,16 +27,16 @@ import org.junit.runners.Parameterized.Parameters;
 import java.util.Arrays;
 import java.util.Collection;
 
-import static io.netty.handler.codec.http.HttpHeaderValues.CLOSE;
-import static io.netty.handler.codec.http.HttpHeaderValues.KEEP_ALIVE;
-import static io.netty.handler.codec.http.HttpHeaderValues.MULTIPART_MIXED;
+import static io.netty.handler.codec.http.HttpHeaders.Names;
+import static io.netty.handler.codec.http.HttpHeaders.Values.CLOSE;
+import static io.netty.handler.codec.http.HttpHeaders.Values.KEEP_ALIVE;
+import static io.netty.handler.codec.http.HttpHeaders.isContentLengthSet;
+import static io.netty.handler.codec.http.HttpHeaders.isKeepAlive;
+import static io.netty.handler.codec.http.HttpHeaders.setContentLength;
+import static io.netty.handler.codec.http.HttpHeaders.setKeepAlive;
+import static io.netty.handler.codec.http.HttpHeaders.setTransferEncodingChunked;
 import static io.netty.handler.codec.http.HttpResponseStatus.NO_CONTENT;
 import static io.netty.handler.codec.http.HttpResponseStatus.OK;
-import static io.netty.handler.codec.http.HttpUtil.isContentLengthSet;
-import static io.netty.handler.codec.http.HttpUtil.isKeepAlive;
-import static io.netty.handler.codec.http.HttpUtil.setContentLength;
-import static io.netty.handler.codec.http.HttpUtil.setKeepAlive;
-import static io.netty.handler.codec.http.HttpUtil.setTransferEncodingChunked;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -100,7 +100,7 @@ public class HttpServerKeepAliveHandlerTest {
         setKeepAlive(request, REQUEST_KEEP_ALIVE.equals(sendKeepAlive));
         HttpResponse response = new DefaultFullHttpResponse(httpVersion, responseStatus);
         if (!StringUtil.isNullOrEmpty(setResponseConnection)) {
-            response.headers().set(HttpHeaderNames.CONNECTION, setResponseConnection);
+            response.headers().set(Names.CONNECTION, setResponseConnection);
         }
         setupMessageLength(response);
 
@@ -109,38 +109,10 @@ public class HttpServerKeepAliveHandlerTest {
         assertEquals(request, requestForwarded);
         ReferenceCountUtil.release(requestForwarded);
         channel.writeAndFlush(response);
-        HttpResponse writtenResponse = channel.readOutbound();
+        HttpResponse writtenResponse = (HttpResponse) channel.readOutbound();
 
         assertEquals("channel.isOpen", isKeepAliveResponseExpected, channel.isOpen());
         assertEquals("response keep-alive", isKeepAliveResponseExpected, isKeepAlive(writtenResponse));
-        ReferenceCountUtil.release(writtenResponse);
-        assertFalse(channel.finishAndReleaseAll());
-    }
-
-    @Test
-    public void testConnectionCloseHeaderHandledCorrectly() throws Exception {
-        HttpResponse response = new DefaultFullHttpResponse(httpVersion, responseStatus);
-        response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
-        setupMessageLength(response);
-
-        channel.writeAndFlush(response);
-        HttpResponse writtenResponse = channel.readOutbound();
-
-        assertFalse(channel.isOpen());
-        ReferenceCountUtil.release(writtenResponse);
-        assertFalse(channel.finishAndReleaseAll());
-    }
-
-    @Test
-    public void testConnectionCloseHeaderHandledCorrectlyForVoidPromise() throws Exception {
-        HttpResponse response = new DefaultFullHttpResponse(httpVersion, responseStatus);
-        response.headers().set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
-        setupMessageLength(response);
-
-        channel.writeAndFlush(response, channel.voidPromise());
-        HttpResponse writtenResponse = channel.readOutbound();
-
-        assertFalse(channel.isOpen());
         ReferenceCountUtil.release(writtenResponse);
         assertFalse(channel.finishAndReleaseAll());
     }
@@ -165,8 +137,8 @@ public class HttpServerKeepAliveHandlerTest {
         assertEquals(firstRequest, requestForwarded);
         ReferenceCountUtil.release(requestForwarded);
 
-        channel.writeAndFlush(response.retainedDuplicate());
-        HttpResponse firstResponse = channel.readOutbound();
+        channel.writeAndFlush(response.duplicate().retain());
+        HttpResponse firstResponse = (HttpResponse) channel.readOutbound();
         assertTrue("channel.isOpen", channel.isOpen());
         assertTrue("response keep-alive", isKeepAlive(firstResponse));
         ReferenceCountUtil.release(firstResponse);
@@ -176,19 +148,19 @@ public class HttpServerKeepAliveHandlerTest {
         ReferenceCountUtil.release(requestForwarded);
 
         channel.writeAndFlush(informationalResp);
-        HttpResponse writtenInfoResp = channel.readOutbound();
+        HttpResponse writtenInfoResp = (HttpResponse) channel.readOutbound();
         assertTrue("channel.isOpen", channel.isOpen());
         assertTrue("response keep-alive", isKeepAlive(writtenInfoResp));
         ReferenceCountUtil.release(writtenInfoResp);
 
         if (!StringUtil.isNullOrEmpty(setResponseConnection)) {
-            response.headers().set(HttpHeaderNames.CONNECTION, setResponseConnection);
+            response.headers().set(Names.CONNECTION, setResponseConnection);
         } else {
-            response.headers().remove(HttpHeaderNames.CONNECTION);
+            response.headers().remove(Names.CONNECTION);
         }
         setupMessageLength(response);
-        channel.writeAndFlush(response.retainedDuplicate());
-        HttpResponse secondResponse = channel.readOutbound();
+        channel.writeAndFlush(response.duplicate().retain());
+        HttpResponse secondResponse = (HttpResponse) channel.readOutbound();
         assertEquals("channel.isOpen", isKeepAliveResponseExpected, channel.isOpen());
         assertEquals("response keep-alive", isKeepAliveResponseExpected, isKeepAlive(secondResponse));
         ReferenceCountUtil.release(secondResponse);
@@ -199,7 +171,7 @@ public class HttpServerKeepAliveHandlerTest {
 
         if (isKeepAliveResponseExpected) {
             channel.writeAndFlush(response);
-            HttpResponse finalResponse = channel.readOutbound();
+            HttpResponse finalResponse = (HttpResponse) channel.readOutbound();
             assertFalse("channel.isOpen", channel.isOpen());
             assertFalse("response keep-alive", isKeepAlive(finalResponse));
         }
@@ -211,17 +183,17 @@ public class HttpServerKeepAliveHandlerTest {
         switch (setSelfDefinedMessageLength) {
         case NOT_SELF_DEFINED_MSG_LENGTH:
             if (isContentLengthSet(response)) {
-                response.headers().remove(HttpHeaderNames.CONTENT_LENGTH);
+                response.headers().remove(Names.CONTENT_LENGTH);
             }
             break;
         case SET_RESPONSE_LENGTH:
             setContentLength(response, 0);
             break;
         case SET_CHUNKED:
-            setTransferEncodingChunked(response, true);
+            setTransferEncodingChunked(response);
             break;
         case SET_MULTIPART:
-            response.headers().set(HttpHeaderNames.CONTENT_TYPE, MULTIPART_MIXED.toUpperCase());
+            response.headers().set(Names.CONTENT_TYPE, "multipart/mixed".toUpperCase());
             break;
         default:
             throw new IllegalArgumentException("selfDefinedMessageLength: " + setSelfDefinedMessageLength);

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -33,18 +33,13 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 /**
  * The {@link PlatformDependent} operations which requires access to {@code sun.misc.*}.
  */
-@SuppressJava6Requirement(reason = "Unsafe access is guarded")
 final class PlatformDependent0 {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(PlatformDependent0.class);
     private static final long ADDRESS_FIELD_OFFSET;
     private static final long BYTE_ARRAY_BASE_OFFSET;
-    private static final long INT_ARRAY_BASE_OFFSET;
-    private static final long INT_ARRAY_INDEX_SCALE;
-    private static final long LONG_ARRAY_BASE_OFFSET;
-    private static final long LONG_ARRAY_INDEX_SCALE;
     private static final Constructor<?> DIRECT_BUFFER_CONSTRUCTOR;
-    private static final Throwable EXPLICIT_NO_UNSAFE_CAUSE = explicitNoUnsafeCause0();
+    private static final boolean IS_EXPLICIT_NO_UNSAFE = explicitNoUnsafe0();
     private static final Method ALLOCATE_ARRAY_METHOD;
     private static final int JAVA_VERSION = javaVersion0();
     private static final boolean IS_ANDROID = isAndroid0();
@@ -53,17 +48,7 @@ final class PlatformDependent0 {
     private static final Object INTERNAL_UNSAFE;
     private static final boolean IS_EXPLICIT_TRY_REFLECTION_SET_ACCESSIBLE = explicitTryReflectionSetAccessible0();
 
-    // See https://github.com/oracle/graal/blob/master/sdk/src/org.graalvm.nativeimage/src/org/graalvm/nativeimage/
-    // ImageInfo.java
-    private static final boolean RUNNING_IN_NATIVE_IMAGE = SystemPropertyUtil.contains(
-            "org.graalvm.nativeimage.imagecode");
-
     static final Unsafe UNSAFE;
-
-    // constants borrowed from murmur3
-    static final int HASH_CODE_ASCII_SEED = 0xc2b2ae35;
-    static final int HASH_CODE_C1 = 0xcc9e2d51;
-    static final int HASH_CODE_C2 = 0x1b873593;
 
     /**
      * Limits the number of bytes to copy per {@link Unsafe#copyMemory(long, long, long)} to allow safepoint polling
@@ -81,9 +66,10 @@ final class PlatformDependent0 {
         Unsafe unsafe;
         Object internalUnsafe = null;
 
-        if ((unsafeUnavailabilityCause = EXPLICIT_NO_UNSAFE_CAUSE) != null) {
+        if (isExplicitNoUnsafe()) {
             direct = null;
             addressField = null;
+            unsafeUnavailabilityCause = new UnsupportedOperationException("Unsafe explicitly disabled");
             unsafe = null;
             internalUnsafe = null;
         } else {
@@ -132,7 +118,7 @@ final class PlatformDependent0 {
 
             // ensure the unsafe supports all necessary methods to work around the mistake in the latest OpenJDK
             // https://github.com/netty/netty/issues/1061
-            // https://www.mail-archive.com/jdk6-dev@openjdk.java.net/msg00698.html
+            // http://www.mail-archive.com/jdk6-dev@openjdk.java.net/msg00698.html
             if (unsafe != null) {
                 final Unsafe finalUnsafe = unsafe;
                 final Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
@@ -215,12 +201,8 @@ final class PlatformDependent0 {
         UNSAFE = unsafe;
 
         if (unsafe == null) {
-            ADDRESS_FIELD_OFFSET = -1;
             BYTE_ARRAY_BASE_OFFSET = -1;
-            LONG_ARRAY_BASE_OFFSET = -1;
-            LONG_ARRAY_INDEX_SCALE = -1;
-            INT_ARRAY_BASE_OFFSET = -1;
-            INT_ARRAY_INDEX_SCALE = -1;
+            ADDRESS_FIELD_OFFSET = -1;
             UNALIGNED = false;
             DIRECT_BUFFER_CONSTRUCTOR = null;
             ALLOCATE_ARRAY_METHOD = null;
@@ -275,37 +257,13 @@ final class PlatformDependent0 {
             }
             DIRECT_BUFFER_CONSTRUCTOR = directBufferConstructor;
             ADDRESS_FIELD_OFFSET = objectFieldOffset(addressField);
-            BYTE_ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(byte[].class);
-            INT_ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(int[].class);
-            INT_ARRAY_INDEX_SCALE = UNSAFE.arrayIndexScale(int[].class);
-            LONG_ARRAY_BASE_OFFSET = UNSAFE.arrayBaseOffset(long[].class);
-            LONG_ARRAY_INDEX_SCALE = UNSAFE.arrayIndexScale(long[].class);
-            final boolean unaligned;
+            boolean unaligned;
             Object maybeUnaligned = AccessController.doPrivileged(new PrivilegedAction<Object>() {
                 @Override
                 public Object run() {
                     try {
                         Class<?> bitsClass =
                                 Class.forName("java.nio.Bits", false, getSystemClassLoader());
-                        int version = javaVersion();
-                        if (unsafeStaticFieldOffsetSupported() && version >= 9) {
-                            // Java9/10 use all lowercase and later versions all uppercase.
-                            String fieldName = version >= 11 ? "UNALIGNED" : "unaligned";
-                            // On Java9 and later we try to directly access the field as we can do this without
-                            // adjust the accessible levels.
-                            try {
-                                Field unalignedField = bitsClass.getDeclaredField(fieldName);
-                                if (unalignedField.getType() == boolean.class) {
-                                    long offset = UNSAFE.staticFieldOffset(unalignedField);
-                                    Object object = UNSAFE.staticFieldBase(unalignedField);
-                                    return UNSAFE.getBoolean(object, offset);
-                                }
-                                // There is something unexpected stored in the field,
-                                // let us fall-back and try to use a reflective method call as last resort.
-                            } catch (NoSuchFieldException ignore) {
-                                // We did not find the field we expected, move on.
-                            }
-                        }
                         Method unalignedMethod = bitsClass.getDeclaredMethod("unaligned");
                         Throwable cause = ReflectionUtil.trySetAccessible(unalignedMethod, true);
                         if (cause != null) {
@@ -338,6 +296,7 @@ final class PlatformDependent0 {
             }
 
             UNALIGNED = unaligned;
+            BYTE_ARRAY_BASE_OFFSET = arrayBaseOffset();
 
             if (javaVersion() >= 9) {
                 Object maybeException = AccessController.doPrivileged(new PrivilegedAction<Object>() {
@@ -404,38 +363,33 @@ final class PlatformDependent0 {
                 DIRECT_BUFFER_CONSTRUCTOR != null ? "available" : "unavailable");
     }
 
-    private static boolean unsafeStaticFieldOffsetSupported() {
-        return !RUNNING_IN_NATIVE_IMAGE;
-    }
-
     static boolean isExplicitNoUnsafe() {
-        return EXPLICIT_NO_UNSAFE_CAUSE != null;
+        return IS_EXPLICIT_NO_UNSAFE;
     }
 
-    private static Throwable explicitNoUnsafeCause0() {
+    private static boolean explicitNoUnsafe0() {
         final boolean noUnsafe = SystemPropertyUtil.getBoolean("io.netty.noUnsafe", false);
         logger.debug("-Dio.netty.noUnsafe: {}", noUnsafe);
 
         if (noUnsafe) {
             logger.debug("sun.misc.Unsafe: unavailable (io.netty.noUnsafe)");
-            return new UnsupportedOperationException("sun.misc.Unsafe: unavailable (io.netty.noUnsafe)");
+            return true;
         }
 
         // Legacy properties
-        String unsafePropName;
+        boolean tryUnsafe;
         if (SystemPropertyUtil.contains("io.netty.tryUnsafe")) {
-            unsafePropName = "io.netty.tryUnsafe";
+            tryUnsafe = SystemPropertyUtil.getBoolean("io.netty.tryUnsafe", true);
         } else {
-            unsafePropName = "org.jboss.netty.tryUnsafe";
+            tryUnsafe = SystemPropertyUtil.getBoolean("org.jboss.netty.tryUnsafe", true);
         }
 
-        if (!SystemPropertyUtil.getBoolean(unsafePropName, true)) {
-            String msg = "sun.misc.Unsafe: unavailable (" + unsafePropName + ")";
-            logger.debug(msg);
-            return new UnsupportedOperationException(msg);
+        if (!tryUnsafe) {
+            logger.debug("sun.misc.Unsafe: unavailable (io.netty.tryUnsafe/org.jboss.netty.tryUnsafe)");
+            return true;
         }
 
-        return null;
+        return false;
     }
 
     static boolean isUnaligned() {
@@ -448,10 +402,6 @@ final class PlatformDependent0 {
 
     static Throwable getUnsafeUnavailabilityCause() {
         return UNSAFE_UNAVAILABILITY_CAUSE;
-    }
-
-    static boolean unalignedAccess() {
-        return UNALIGNED;
     }
 
     static void throwException(Throwable cause) {
@@ -468,10 +418,7 @@ final class PlatformDependent0 {
     }
 
     static ByteBuffer allocateDirectNoCleaner(int capacity) {
-        // Calling malloc with capacity of 0 may return a null ptr or a memory address that can be used.
-        // Just use 1 to make it safe to use in all cases:
-        // See: https://pubs.opengroup.org/onlinepubs/009695399/functions/malloc.html
-        return newDirectBuffer(UNSAFE.allocateMemory(Math.max(1, capacity)), capacity);
+        return newDirectBuffer(UNSAFE.allocateMemory(capacity), capacity);
     }
 
     static boolean hasAllocateArrayMethod() {
@@ -506,8 +453,8 @@ final class PlatformDependent0 {
         return getLong(buffer, ADDRESS_FIELD_OFFSET);
     }
 
-    static long byteArrayBaseOffset() {
-        return BYTE_ARRAY_BASE_OFFSET;
+    static long arrayBaseOffset() {
+        return UNSAFE.arrayBaseOffset(byte[].class);
     }
 
     static Object getObject(Object object, long fieldOffset) {
@@ -546,10 +493,6 @@ final class PlatformDependent0 {
         return UNSAFE.getByte(data, BYTE_ARRAY_BASE_OFFSET + index);
     }
 
-    static byte getByte(byte[] data, long index) {
-        return UNSAFE.getByte(data, BYTE_ARRAY_BASE_OFFSET + index);
-    }
-
     static short getShort(byte[] data, int index) {
         return UNSAFE.getShort(data, BYTE_ARRAY_BASE_OFFSET + index);
     }
@@ -558,24 +501,8 @@ final class PlatformDependent0 {
         return UNSAFE.getInt(data, BYTE_ARRAY_BASE_OFFSET + index);
     }
 
-    static int getInt(int[] data, long index) {
-        return UNSAFE.getInt(data, INT_ARRAY_BASE_OFFSET + INT_ARRAY_INDEX_SCALE * index);
-    }
-
-    static int getIntVolatile(long address) {
-        return UNSAFE.getIntVolatile(null, address);
-    }
-
-    static void putIntOrdered(long adddress, int newValue) {
-        UNSAFE.putOrderedInt(null, adddress, newValue);
-    }
-
     static long getLong(byte[] data, int index) {
         return UNSAFE.getLong(data, BYTE_ARRAY_BASE_OFFSET + index);
-    }
-
-    static long getLong(long[] data, long index) {
-        return UNSAFE.getLong(data, LONG_ARRAY_BASE_OFFSET + LONG_ARRAY_INDEX_SCALE * index);
     }
 
     static void putByte(long address, byte value) {
@@ -598,10 +525,6 @@ final class PlatformDependent0 {
         UNSAFE.putByte(data, BYTE_ARRAY_BASE_OFFSET + index, value);
     }
 
-    static void putByte(Object data, long offset, byte value) {
-        UNSAFE.putByte(data, offset, value);
-    }
-
     static void putShort(byte[] data, int index, short value) {
         UNSAFE.putShort(data, BYTE_ARRAY_BASE_OFFSET + index, value);
     }
@@ -614,21 +537,8 @@ final class PlatformDependent0 {
         UNSAFE.putLong(data, BYTE_ARRAY_BASE_OFFSET + index, value);
     }
 
-    static void putObject(Object o, long offset, Object x) {
-        UNSAFE.putObject(o, offset, x);
-    }
-
     static void copyMemory(long srcAddr, long dstAddr, long length) {
-        // Manual safe-point polling is only needed prior Java9:
-        // See https://bugs.openjdk.java.net/browse/JDK-8149596
-        if (javaVersion() <= 8) {
-            copyMemoryWithSafePointPolling(srcAddr, dstAddr, length);
-        } else {
-            UNSAFE.copyMemory(srcAddr, dstAddr, length);
-        }
-    }
-
-    private static void copyMemoryWithSafePointPolling(long srcAddr, long dstAddr, long length) {
+        //UNSAFE.copyMemory(srcAddr, dstAddr, length);
         while (length > 0) {
             long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
             UNSAFE.copyMemory(srcAddr, dstAddr, size);
@@ -639,17 +549,7 @@ final class PlatformDependent0 {
     }
 
     static void copyMemory(Object src, long srcOffset, Object dst, long dstOffset, long length) {
-        // Manual safe-point polling is only needed prior Java9:
-        // See https://bugs.openjdk.java.net/browse/JDK-8149596
-        if (javaVersion() <= 8) {
-            copyMemoryWithSafePointPolling(src, srcOffset, dst, dstOffset, length);
-        } else {
-            UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, length);
-        }
-    }
-
-    private static void copyMemoryWithSafePointPolling(
-            Object src, long srcOffset, Object dst, long dstOffset, long length) {
+        //UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, length);
         while (length > 0) {
             long size = Math.min(length, UNSAFE_COPY_THRESHOLD);
             UNSAFE.copyMemory(src, srcOffset, dst, dstOffset, size);
@@ -665,60 +565,6 @@ final class PlatformDependent0 {
 
     static void setMemory(Object o, long offset, long bytes, byte value) {
         UNSAFE.setMemory(o, offset, bytes, value);
-    }
-
-    static boolean equals(byte[] bytes1, int startPos1, byte[] bytes2, int startPos2, int length) {
-        int remainingBytes = length & 7;
-        final long baseOffset1 = BYTE_ARRAY_BASE_OFFSET + startPos1;
-        final long diff = startPos2 - startPos1;
-        if (length >= 8) {
-            final long end = baseOffset1 + remainingBytes;
-            for (long i = baseOffset1 - 8 + length; i >= end; i -= 8) {
-                if (UNSAFE.getLong(bytes1, i) != UNSAFE.getLong(bytes2, i + diff)) {
-                    return false;
-                }
-            }
-        }
-        if (remainingBytes >= 4) {
-            remainingBytes -= 4;
-            long pos = baseOffset1 + remainingBytes;
-            if (UNSAFE.getInt(bytes1, pos) != UNSAFE.getInt(bytes2, pos + diff)) {
-                return false;
-            }
-        }
-        final long baseOffset2 = baseOffset1 + diff;
-        if (remainingBytes >= 2) {
-            return UNSAFE.getChar(bytes1, baseOffset1) == UNSAFE.getChar(bytes2, baseOffset2) &&
-                    (remainingBytes == 2 ||
-                    UNSAFE.getByte(bytes1, baseOffset1 + 2) == UNSAFE.getByte(bytes2, baseOffset2 + 2));
-        }
-        return remainingBytes == 0 ||
-                UNSAFE.getByte(bytes1, baseOffset1) == UNSAFE.getByte(bytes2, baseOffset2);
-    }
-
-    static int equalsConstantTime(byte[] bytes1, int startPos1, byte[] bytes2, int startPos2, int length) {
-        long result = 0;
-        long remainingBytes = length & 7;
-        final long baseOffset1 = BYTE_ARRAY_BASE_OFFSET + startPos1;
-        final long end = baseOffset1 + remainingBytes;
-        final long diff = startPos2 - startPos1;
-        for (long i = baseOffset1 - 8 + length; i >= end; i -= 8) {
-            result |= UNSAFE.getLong(bytes1, i) ^ UNSAFE.getLong(bytes2, i + diff);
-        }
-        if (remainingBytes >= 4) {
-            result |= UNSAFE.getInt(bytes1, baseOffset1) ^ UNSAFE.getInt(bytes2, baseOffset1 + diff);
-            remainingBytes -= 4;
-        }
-        if (remainingBytes >= 2) {
-            long pos = end - remainingBytes;
-            result |= UNSAFE.getChar(bytes1, pos) ^ UNSAFE.getChar(bytes2, pos + diff);
-            remainingBytes -= 2;
-        }
-        if (remainingBytes == 1) {
-            long pos = end - 1;
-            result |= UNSAFE.getByte(bytes1, pos) ^ UNSAFE.getByte(bytes2, pos + diff);
-        }
-        return ConstantTimeUtils.equalsConstantTime(result, 0);
     }
 
     static boolean isZero(byte[] bytes, int startPos, int length) {
@@ -745,56 +591,6 @@ final class PlatformDependent0 {
                     (remainingBytes == 2 || bytes[startPos + 2] == 0);
         }
         return bytes[startPos] == 0;
-    }
-
-    static int hashCodeAscii(byte[] bytes, int startPos, int length) {
-        int hash = HASH_CODE_ASCII_SEED;
-        long baseOffset = BYTE_ARRAY_BASE_OFFSET + startPos;
-        final int remainingBytes = length & 7;
-        final long end = baseOffset + remainingBytes;
-        for (long i = baseOffset - 8 + length; i >= end; i -= 8) {
-            hash = hashCodeAsciiCompute(UNSAFE.getLong(bytes, i), hash);
-        }
-        if (remainingBytes == 0) {
-            return hash;
-        }
-        int hcConst = HASH_CODE_C1;
-        if (remainingBytes != 2 & remainingBytes != 4 & remainingBytes != 6) { // 1, 3, 5, 7
-            hash = hash * HASH_CODE_C1 + hashCodeAsciiSanitize(UNSAFE.getByte(bytes, baseOffset));
-            hcConst = HASH_CODE_C2;
-            baseOffset++;
-        }
-        if (remainingBytes != 1 & remainingBytes != 4 & remainingBytes != 5) { // 2, 3, 6, 7
-            hash = hash * hcConst + hashCodeAsciiSanitize(UNSAFE.getShort(bytes, baseOffset));
-            hcConst = hcConst == HASH_CODE_C1 ? HASH_CODE_C2 : HASH_CODE_C1;
-            baseOffset += 2;
-        }
-        if (remainingBytes >= 4) { // 4, 5, 6, 7
-            return hash * hcConst + hashCodeAsciiSanitize(UNSAFE.getInt(bytes, baseOffset));
-        }
-        return hash;
-    }
-
-    static int hashCodeAsciiCompute(long value, int hash) {
-        // masking with 0x1f reduces the number of overall bits that impact the hash code but makes the hash
-        // code the same regardless of character case (upper case or lower case hash is the same).
-        return hash * HASH_CODE_C1 +
-                // Low order int
-                hashCodeAsciiSanitize((int) value) * HASH_CODE_C2 +
-                // High order int
-                (int) ((value & 0x1f1f1f1f00000000L) >>> 32);
-    }
-
-    static int hashCodeAsciiSanitize(int value) {
-        return value & 0x1f1f1f1f;
-    }
-
-    static int hashCodeAsciiSanitize(short value) {
-        return value & 0x1f1f;
-    }
-
-    static int hashCodeAsciiSanitize(byte value) {
-        return value & 0x1f;
     }
 
     static ClassLoader getClassLoader(final Class<?> clazz) {
@@ -857,19 +653,19 @@ final class PlatformDependent0 {
     }
 
     private static boolean isAndroid0() {
-        // Idea: Sometimes java binaries include Android classes on the classpath, even if it isn't actually Android.
-        // Rather than check if certain classes are present, just check the VM, which is tied to the JDK.
+        boolean android;
+        try {
+            Class.forName("android.app.Application", false, getSystemClassLoader());
+            android = true;
+        } catch (Throwable ignored) {
+            // Failed to load the class uniquely available in Android.
+            android = false;
+        }
 
-        // Optional improvement: check if `android.os.Build.VERSION` is >= 24. On later versions of Android, the
-        // OpenJDK is used, which means `Unsafe` will actually work as expected.
-
-        // Android sets this property to Dalvik, regardless of whether it actually is.
-        String vmName = SystemPropertyUtil.get("java.vm.name");
-        boolean isAndroid = "Dalvik".equals(vmName);
-        if (isAndroid) {
+        if (android) {
             logger.debug("Platform: Android");
         }
-        return isAndroid;
+        return android;
     }
 
     private static boolean explicitTryReflectionSetAccessible0() {
@@ -922,4 +718,5 @@ final class PlatformDependent0 {
 
     private PlatformDependent0() {
     }
+
 }

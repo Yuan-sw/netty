@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,6 +18,8 @@ package io.netty.channel.epoll;
 import io.netty.channel.Channel;
 import io.netty.channel.EventLoop;
 import io.netty.channel.socket.ServerSocketChannel;
+import io.netty.channel.unix.FileDescriptor;
+import io.netty.channel.unix.Socket;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -27,8 +29,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 
-import static io.netty.channel.epoll.LinuxSocket.newSocketStream;
 import static io.netty.channel.unix.NativeInetAddress.address;
+import static io.netty.channel.unix.Socket.newSocketStream;
 
 /**
  * {@link ServerSocketChannel} implementation that uses linux EPOLL Edge-Triggered Mode for
@@ -44,18 +46,28 @@ public final class EpollServerSocketChannel extends AbstractEpollServerChannel i
         config = new EpollServerSocketChannelConfig(this);
     }
 
-    public EpollServerSocketChannel(int fd) {
+    /**
+     * @deprecated Use {@link #EpollServerSocketChannel(Socket, boolean)}.
+     * Creates a new {@link EpollServerSocketChannel} from an existing {@link FileDescriptor}.
+     */
+    @Deprecated
+    public EpollServerSocketChannel(FileDescriptor fd) {
         // Must call this constructor to ensure this object's local address is configured correctly.
         // The local address can only be obtained from a Socket object.
-        this(new LinuxSocket(fd));
+        this(new Socket(fd.intValue()));
     }
 
-    EpollServerSocketChannel(LinuxSocket fd) {
+    /**
+     * @deprecated Use {@link #EpollServerSocketChannel(Socket, boolean)}.
+     * Creates a new {@link EpollServerSocketChannel} from an existing {@link Socket}.
+     */
+    @Deprecated
+    public EpollServerSocketChannel(Socket fd) {
         super(fd);
         config = new EpollServerSocketChannelConfig(this);
     }
 
-    EpollServerSocketChannel(LinuxSocket fd, boolean active) {
+    public EpollServerSocketChannel(Socket fd, boolean active) {
         super(fd, active);
         config = new EpollServerSocketChannelConfig(this);
     }
@@ -69,9 +81,9 @@ public final class EpollServerSocketChannel extends AbstractEpollServerChannel i
     protected void doBind(SocketAddress localAddress) throws Exception {
         super.doBind(localAddress);
         if (Native.IS_SUPPORTING_TCP_FASTOPEN && config.getTcpFastopen() > 0) {
-            socket.setTcpFastOpen(config.getTcpFastopen());
+            Native.setTcpFastopen(fd().intValue(), config.getTcpFastopen());
         }
-        socket.listen(config.getBacklog());
+        fd().listen(config.getBacklog());
         active = true;
     }
 
@@ -92,7 +104,7 @@ public final class EpollServerSocketChannel extends AbstractEpollServerChannel i
 
     @Override
     protected Channel newChildChannel(int fd, byte[] address, int offset, int len) throws Exception {
-        return new EpollSocketChannel(this, new LinuxSocket(fd), address(address, offset, len));
+        return new EpollSocketChannel(this, new Socket(fd), address(address, offset, len));
     }
 
     Collection<InetAddress> tcpMd5SigAddresses() {

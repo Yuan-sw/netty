@@ -1,26 +1,15 @@
-# Using the docker images
+
+** Create a docker image **
+```
+docker build -f Dockerfile-netty-centos6 . -t netty-centos6
+```
+
+** Using the image **
 
 ```
 cd /path/to/netty/
 ```
 
-## centos 6 with java 8
-
 ```
-docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.centos-6.18.yaml run test
+docker run -it -v ~/.m2:/root/.m2 -v ~/.ssh:/root/.ssh -v ~/.gnupg:/root/.gnupg -v `pwd`:/code -w /code netty-centos6 bash
 ```
-
-## centos 6 with java 11
-
-```
-docker-compose -f docker/docker-compose.yaml -f docker/docker-compose.centos-6.111.yaml run test
-```
-
-## aarch64 cross compile for transport-native-epoll on X86_64
-
-```
-docker-compose -f docker/docker-compose.yaml run cross-compile-aarch64-build
-```
-The default version of aarch64 gcc is `4.9-2016.02`. Update the parameter `gcc_version` in `docker-compose.yaml` to use a version you want.
-
-etc, etc

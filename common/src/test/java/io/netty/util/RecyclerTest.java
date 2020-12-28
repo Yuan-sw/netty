@@ -5,7 +5,7 @@
 * version 2.0 (the "License"); you may not use this file except in compliance
 * with the License. You may obtain a copy of the License at:
 *
-*   https://www.apache.org/licenses/LICENSE-2.0
+*   http://www.apache.org/licenses/LICENSE-2.0
 *
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -26,18 +26,11 @@ import static org.junit.Assert.*;
 
 public class RecyclerTest {
 
-    private static Recycler<HandledObject> newRecycler(int maxCapacityPerThread) {
-        return newRecycler(maxCapacityPerThread, 2, 8, 2, 8);
-    }
-
-    private static Recycler<HandledObject> newRecycler(int maxCapacityPerThread, int maxSharedCapacityFactor,
-                                                       int ratio, int maxDelayedQueuesPerThread,
-                                                       int delayedQueueRatio) {
-        return new Recycler<HandledObject>(maxCapacityPerThread, maxSharedCapacityFactor, ratio,
-                maxDelayedQueuesPerThread, delayedQueueRatio) {
+    private static Recycler<HandledObject> newRecycler(int max) {
+        return new Recycler<HandledObject>(max) {
             @Override
             protected HandledObject newObject(
-                    Recycler.Handle<HandledObject> handle) {
+                    Recycler.Handle handle) {
                 return new HandledObject(handle);
             }
         };
@@ -77,101 +70,36 @@ public class RecyclerTest {
         }
 
         // Now call recycle after the Thread was collected to ensure this still works...
-        reference.getAndSet(null).recycle();
+        HandledObject object = reference.getAndSet(null);
+        recycler.recycle(object, object.handle);
     }
 
     @Test(expected = IllegalStateException.class)
     public void testMultipleRecycle() {
         Recycler<HandledObject> recycler = newRecycler(1024);
         HandledObject object = recycler.get();
-        object.recycle();
-        object.recycle();
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testMultipleRecycleAtDifferentThread() throws InterruptedException {
-        Recycler<HandledObject> recycler = newRecycler(1024);
-        final HandledObject object = recycler.get();
-        final AtomicReference<IllegalStateException> exceptionStore = new AtomicReference<IllegalStateException>();
-        final Thread thread1 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                object.recycle();
-            }
-        });
-        thread1.start();
-        thread1.join();
-
-        final Thread thread2 = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                try {
-                    object.recycle();
-                } catch (IllegalStateException e) {
-                    exceptionStore.set(e);
-                }
-            }
-        });
-        thread2.start();
-        thread2.join();
-        IllegalStateException exception = exceptionStore.get();
-        if (exception != null) {
-            throw exception;
-        }
+        recycler.recycle(object, object.handle);
+        recycler.recycle(object, object.handle);
     }
 
     @Test
     public void testRecycle() {
         Recycler<HandledObject> recycler = newRecycler(1024);
         HandledObject object = recycler.get();
-        object.recycle();
+        recycler.recycle(object, object.handle);
         HandledObject object2 = recycler.get();
         assertSame(object, object2);
-        object2.recycle();
+        recycler.recycle(object2, object2.handle);
     }
 
     @Test
     public void testRecycleDisable() {
         Recycler<HandledObject> recycler = newRecycler(-1);
         HandledObject object = recycler.get();
-        object.recycle();
+        recycler.recycle(object, object.handle);
         HandledObject object2 = recycler.get();
         assertNotSame(object, object2);
-        object2.recycle();
-    }
-
-    @Test
-    public void testRecycleDisableDrop() {
-        Recycler<HandledObject> recycler = newRecycler(1024, 2, 0, 2, 0);
-        HandledObject object = recycler.get();
-        object.recycle();
-        HandledObject object2 = recycler.get();
-        assertSame(object, object2);
-        object2.recycle();
-        HandledObject object3 = recycler.get();
-        assertSame(object, object3);
-        object3.recycle();
-    }
-
-    @Test
-    public void testRecycleDisableDelayedQueueDrop() throws Exception {
-        final Recycler<HandledObject> recycler = newRecycler(1024, 2, 1, 2, 0);
-        final HandledObject o = recycler.get();
-        final HandledObject o2 = recycler.get();
-        final HandledObject o3 = recycler.get();
-        final Thread thread = new Thread() {
-            @Override
-            public void run() {
-                o.recycle();
-                o2.recycle();
-                o3.recycle();
-            }
-        };
-        thread.start();
-        thread.join();
-        // In reverse order
-        assertSame(o3, recycler.get());
-        assertSame(o, recycler.get());
+        recycler.recycle(object2, object2.handle);
     }
 
     /**
@@ -195,7 +123,7 @@ public class RecyclerTest {
         }
 
         for (int i = 0; i < objects.length; i++) {
-            objects[i].recycle();
+            recycler.recycle(objects[i], objects[i].handle);
             objects[i] = null;
         }
 
@@ -206,15 +134,20 @@ public class RecyclerTest {
 
     @Test
     public void testRecycleAtDifferentThread() throws Exception {
-        final Recycler<HandledObject> recycler = newRecycler(256, 10, 2, 10, 2);
+        final Recycler<HandledObject> recycler = new Recycler<HandledObject>(256, 10, 2, 10) {
+            @Override
+            protected HandledObject newObject(Recycler.Handle handle) {
+                return new HandledObject(handle);
+            }
+        };
+
         final HandledObject o = recycler.get();
         final HandledObject o2 = recycler.get();
-
         final Thread thread = new Thread() {
             @Override
             public void run() {
-                o.recycle();
-                o2.recycle();
+                recycler.recycle(o, o.handle);
+                recycler.recycle(o2, o2.handle);
             }
         };
         thread.start();
@@ -239,14 +172,14 @@ public class RecyclerTest {
         }
 
         for (int i = 0; i < maxCapacity; i ++) {
-            array[i].recycle();
+            recycler.recycle(array[i], array[i].handle);
         }
 
         final Thread thread = new Thread() {
             @Override
             public void run() {
                 for (int i = maxCapacity; i < array.length; i ++) {
-                    array[i].recycle();
+                    recycler.recycle(array[i], array[i].handle);
                 }
             }
         };
@@ -271,7 +204,7 @@ public class RecyclerTest {
 
         final Recycler<HandledObject> recycler = new Recycler<HandledObject>(maxCapacity, 2) {
             @Override
-            protected HandledObject newObject(Recycler.Handle<HandledObject> handle) {
+            protected HandledObject newObject(Recycler.Handle handle) {
                 instancesCount.incrementAndGet();
                 return new HandledObject(handle);
             }
@@ -292,7 +225,7 @@ public class RecyclerTest {
             @Override
             public void run() {
                 for (HandledObject object: array) {
-                    object.recycle();
+                    recycler.recycle(object, object.handle);
                 }
             }
         };
@@ -314,14 +247,10 @@ public class RecyclerTest {
     }
 
     static final class HandledObject {
-        Recycler.Handle<HandledObject> handle;
+        Recycler.Handle handle;
 
-        HandledObject(Recycler.Handle<HandledObject> handle) {
+        HandledObject(Recycler.Handle handle) {
             this.handle = handle;
-        }
-
-        void recycle() {
-            handle.recycle(this);
         }
     }
 }

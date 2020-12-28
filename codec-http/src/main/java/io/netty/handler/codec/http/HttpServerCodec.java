@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,18 +23,14 @@ import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_CHUNK_SIZE;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_HEADER_SIZE;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_INITIAL_LINE_LENGTH;
-
 /**
  * A combination of {@link HttpRequestDecoder} and {@link HttpResponseEncoder}
  * which enables easier server side HTTP implementation.
  *
  * @see HttpClientCodec
  */
-public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequestDecoder, HttpResponseEncoder>
-        implements HttpServerUpgradeHandler.SourceCodec {
+public final class HttpServerCodec
+        extends CombinedChannelDuplexHandler<HttpRequestDecoder, HttpResponseEncoder> {
 
     /** A queue that is used for correlating a request and a response. */
     private final Queue<HttpMethod> queue = new ArrayDeque<HttpMethod>();
@@ -45,7 +41,7 @@ public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequ
      * {@code maxChunkSize (8192)}).
      */
     public HttpServerCodec() {
-        this(DEFAULT_MAX_INITIAL_LINE_LENGTH, DEFAULT_MAX_HEADER_SIZE, DEFAULT_MAX_CHUNK_SIZE);
+        this(4096, 8192, 8192);
     }
 
     /**
@@ -75,27 +71,7 @@ public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequ
           new HttpServerResponseEncoder());
     }
 
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpServerCodec(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean validateHeaders,
-                           int initialBufferSize, boolean allowDuplicateContentLengths) {
-        init(new HttpServerRequestDecoder(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders,
-                                          initialBufferSize, allowDuplicateContentLengths),
-             new HttpServerResponseEncoder());
-    }
-
-    /**
-     * Upgrades to another protocol from HTTP. Removes the {@link HttpRequestDecoder} and
-     * {@link HttpResponseEncoder} from the pipeline.
-     */
-    @Override
-    public void upgradeFrom(ChannelHandlerContext ctx) {
-        ctx.pipeline().remove(this);
-    }
-
     private final class HttpServerRequestDecoder extends HttpRequestDecoder {
-
         HttpServerRequestDecoder(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize) {
             super(maxInitialLineLength, maxHeaderSize, maxChunkSize);
         }
@@ -106,15 +82,8 @@ public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequ
         }
 
         HttpServerRequestDecoder(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize,
-
                                         boolean validateHeaders, int initialBufferSize) {
             super(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize);
-        }
-
-        HttpServerRequestDecoder(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize,
-                                 boolean validateHeaders, int initialBufferSize, boolean allowDuplicateContentLengths) {
-            super(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize,
-                  allowDuplicateContentLengths);
         }
 
         @Override
@@ -125,7 +94,7 @@ public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequ
             for (int i = oldSize; i < size; i++) {
                 Object obj = out.get(i);
                 if (obj instanceof HttpRequest) {
-                    queue.add(((HttpRequest) obj).method());
+                    queue.add(((HttpRequest) obj).getMethod());
                 }
             }
         }
@@ -137,11 +106,11 @@ public final class HttpServerCodec extends CombinedChannelDuplexHandler<HttpRequ
 
         @Override
         protected void sanitizeHeadersBeforeEncode(HttpResponse msg, boolean isAlwaysEmpty) {
-            if (!isAlwaysEmpty && HttpMethod.CONNECT.equals(method)
-                    && msg.status().codeClass() == HttpStatusClass.SUCCESS) {
+            int code = msg.getStatus().code();
+            if (!isAlwaysEmpty && method == HttpMethod.CONNECT && code >= 200 && code <= 299) {
                 // Stripping Transfer-Encoding:
                 // See https://tools.ietf.org/html/rfc7230#section-3.3.1
-                msg.headers().remove(HttpHeaderNames.TRANSFER_ENCODING);
+                msg.headers().remove(HttpHeaders.Names.TRANSFER_ENCODING);
                 return;
             }
 

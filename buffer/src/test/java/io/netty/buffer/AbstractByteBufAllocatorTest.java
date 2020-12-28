@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public abstract class AbstractByteBufAllocatorTest<T extends AbstractByteBufAllocator> extends ByteBufAllocatorTest {
 
@@ -42,38 +41,6 @@ public abstract class AbstractByteBufAllocatorTest<T extends AbstractByteBufAllo
     @Override
     protected final int defaultMaxComponents() {
         return AbstractByteBufAllocator.DEFAULT_MAX_COMPONENTS;
-    }
-
-    @Test
-    public void testCalculateNewCapacity() {
-        testCalculateNewCapacity(true);
-        testCalculateNewCapacity(false);
-    }
-
-    private void testCalculateNewCapacity(boolean preferDirect) {
-        T allocator = newAllocator(preferDirect);
-        assertEquals(8, allocator.calculateNewCapacity(1, 8));
-        assertEquals(7, allocator.calculateNewCapacity(1, 7));
-        assertEquals(64, allocator.calculateNewCapacity(1, 129));
-        assertEquals(AbstractByteBufAllocator.CALCULATE_THRESHOLD,
-                allocator.calculateNewCapacity(AbstractByteBufAllocator.CALCULATE_THRESHOLD,
-                        AbstractByteBufAllocator.CALCULATE_THRESHOLD + 1));
-        assertEquals(AbstractByteBufAllocator.CALCULATE_THRESHOLD * 2,
-                allocator.calculateNewCapacity(AbstractByteBufAllocator.CALCULATE_THRESHOLD + 1,
-                        AbstractByteBufAllocator.CALCULATE_THRESHOLD * 4));
-        try {
-            allocator.calculateNewCapacity(8, 7);
-            fail();
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
-
-        try {
-            allocator.calculateNewCapacity(-1, 8);
-            fail();
-        } catch (IllegalArgumentException e) {
-            // expected
-        }
     }
 
     @Test

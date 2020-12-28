@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,7 +25,6 @@ import java.nio.ReadOnlyBufferException;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 
-import static io.netty.buffer.ByteBufUtil.ensureWritableSuccess;
 import static io.netty.buffer.Unpooled.BIG_ENDIAN;
 import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
 import static io.netty.buffer.Unpooled.LITTLE_ENDIAN;
@@ -204,31 +203,21 @@ public class ReadOnlyByteBufTest {
 
     private static void ensureWritableIntStatusShouldFailButNotThrow(boolean force) {
         ByteBuf buf = buffer(1);
-        ByteBuf readOnly = buf.asReadOnly();
+        ByteBuf readOnly = unmodifiableBuffer(buf);
         int result = readOnly.ensureWritable(1, force);
         assertEquals(1, result);
-        assertFalse(ensureWritableSuccess(result));
         readOnly.release();
     }
 
     @Test(expected = ReadOnlyBufferException.class)
     public void ensureWritableShouldThrow() {
         ByteBuf buf = buffer(1);
-        ByteBuf readOnly = buf.asReadOnly();
+        ByteBuf readOnly = unmodifiableBuffer(buf);
         try {
             readOnly.ensureWritable(1);
             fail();
         } finally {
             buf.release();
         }
-    }
-
-    @Test
-    public void asReadOnly() {
-        ByteBuf buf = buffer(1);
-        ByteBuf readOnly = buf.asReadOnly();
-        assertTrue(readOnly.isReadOnly());
-        assertSame(readOnly, readOnly.asReadOnly());
-        readOnly.release();
     }
 }

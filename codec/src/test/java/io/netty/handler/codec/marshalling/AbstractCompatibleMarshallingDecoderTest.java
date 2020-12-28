@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -28,10 +28,7 @@ import org.junit.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public abstract class AbstractCompatibleMarshallingDecoderTest extends AbstractMarshallingTest {
     @SuppressWarnings("RedundantStringConstructorCall")
@@ -56,7 +53,7 @@ public abstract class AbstractCompatibleMarshallingDecoderTest extends AbstractM
         ch.writeInbound(input(testBytes));
         assertTrue(ch.finish());
 
-        String unmarshalled = ch.readInbound();
+        String unmarshalled = (String) ch.readInbound();
 
         assertEquals(testObject, unmarshalled);
 
@@ -84,13 +81,13 @@ public abstract class AbstractCompatibleMarshallingDecoderTest extends AbstractM
         byte[] testBytes = bout.toByteArray();
 
         ByteBuf buffer = input(testBytes);
-        ByteBuf slice = buffer.readRetainedSlice(2);
+        ByteBuf slice = buffer.readSlice(2);
 
-        ch.writeInbound(slice);
+        ch.writeInbound(slice.retain());
         ch.writeInbound(buffer);
         assertTrue(ch.finish());
 
-        String unmarshalled = ch.readInbound();
+        String unmarshalled = (String) ch.readInbound();
 
         assertEquals(testObject, unmarshalled);
 

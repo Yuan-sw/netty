@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,19 +21,18 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.nio.channels.SelectionKey;
-import java.util.Iterator;
-import java.util.NoSuchElementException;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 public class SelectedSelectionKeySetTest {
     @Mock
     private SelectionKey mockKey;
     @Mock
     private SelectionKey mockKey2;
-
-    @Mock
-    private SelectionKey mockKey3;
 
     @Before
     public void setup() {
@@ -63,50 +62,5 @@ public class SelectedSelectionKeySetTest {
         assertNull(set.keys[1]);
         assertEquals(0, set.size());
         assertTrue(set.isEmpty());
-    }
-
-    @Test
-    public void iterator() {
-        SelectedSelectionKeySet set = new SelectedSelectionKeySet();
-        assertTrue(set.add(mockKey));
-        assertTrue(set.add(mockKey2));
-        Iterator<SelectionKey> keys = set.iterator();
-        assertTrue(keys.hasNext());
-        assertSame(mockKey, keys.next());
-        assertTrue(keys.hasNext());
-        assertSame(mockKey2, keys.next());
-        assertFalse(keys.hasNext());
-
-        try {
-            keys.next();
-            fail();
-        } catch (NoSuchElementException expected) {
-            // expected
-        }
-
-        try {
-            keys.remove();
-            fail();
-        } catch (UnsupportedOperationException expected) {
-            // expected
-        }
-    }
-
-    @Test
-    public void contains() {
-        SelectedSelectionKeySet set = new SelectedSelectionKeySet();
-        assertTrue(set.add(mockKey));
-        assertTrue(set.add(mockKey2));
-        assertFalse(set.contains(mockKey));
-        assertFalse(set.contains(mockKey2));
-        assertFalse(set.contains(mockKey3));
-    }
-
-    @Test
-    public void remove() {
-        SelectedSelectionKeySet set = new SelectedSelectionKeySet();
-        assertTrue(set.add(mockKey));
-        assertFalse(set.remove(mockKey));
-        assertFalse(set.remove(mockKey2));
     }
 }

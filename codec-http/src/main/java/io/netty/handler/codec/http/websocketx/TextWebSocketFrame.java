@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.util.CharsetUtil;
 
 /**
- * Web Socket text frame.
+ * Web Socket text frame with assumed UTF-8 encoding
  */
 public class TextWebSocketFrame extends WebSocketFrame {
 
@@ -35,7 +35,7 @@ public class TextWebSocketFrame extends WebSocketFrame {
      * Creates a new text frame with the specified text string. The final fragment flag is set to true.
      *
      * @param text
-     *            String to put in the frame.
+     *            String to put in the frame
      */
     public TextWebSocketFrame(String text) {
         super(fromText(text));
@@ -45,7 +45,7 @@ public class TextWebSocketFrame extends WebSocketFrame {
      * Creates a new text frame with the specified binary data. The final fragment flag is set to true.
      *
      * @param binaryData
-     *            the content of the frame.
+     *            the content of the frame. Must be UTF-8 encoded
      */
     public TextWebSocketFrame(ByteBuf binaryData) {
         super(binaryData);
@@ -59,7 +59,7 @@ public class TextWebSocketFrame extends WebSocketFrame {
      * @param rsv
      *            reserved bits used for protocol extensions
      * @param text
-     *            String to put in the frame.
+     *            String to put in the frame
      */
     public TextWebSocketFrame(boolean finalFragment, int rsv, String text) {
         super(finalFragment, rsv, fromText(text));
@@ -74,21 +74,21 @@ public class TextWebSocketFrame extends WebSocketFrame {
     }
 
     /**
-     * Creates a new text frame with the specified binary data and the final fragment flag.
+     * Creates a new text frame with the specified binary data. The final fragment flag is set to true.
      *
      * @param finalFragment
      *            flag indicating if this frame is the final fragment
      * @param rsv
      *            reserved bits used for protocol extensions
      * @param binaryData
-     *            the content of the frame.
+     *            the content of the frame. Must be UTF-8 encoded
      */
     public TextWebSocketFrame(boolean finalFragment, int rsv, ByteBuf binaryData) {
         super(finalFragment, rsv, binaryData);
     }
 
     /**
-     * Returns the text data in this frame.
+     * Returns the text data in this frame
      */
     public String text() {
         return content().toString(CharsetUtil.UTF_8);
@@ -96,22 +96,12 @@ public class TextWebSocketFrame extends WebSocketFrame {
 
     @Override
     public TextWebSocketFrame copy() {
-        return (TextWebSocketFrame) super.copy();
+        return new TextWebSocketFrame(isFinalFragment(), rsv(), content().copy());
     }
 
     @Override
     public TextWebSocketFrame duplicate() {
-        return (TextWebSocketFrame) super.duplicate();
-    }
-
-    @Override
-    public TextWebSocketFrame retainedDuplicate() {
-        return (TextWebSocketFrame) super.retainedDuplicate();
-    }
-
-    @Override
-    public TextWebSocketFrame replace(ByteBuf content) {
-        return new TextWebSocketFrame(isFinalFragment(), rsv(), content);
+        return new TextWebSocketFrame(isFinalFragment(), rsv(), content().duplicate());
     }
 
     @Override
@@ -123,18 +113,6 @@ public class TextWebSocketFrame extends WebSocketFrame {
     @Override
     public TextWebSocketFrame retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public TextWebSocketFrame touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public TextWebSocketFrame touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

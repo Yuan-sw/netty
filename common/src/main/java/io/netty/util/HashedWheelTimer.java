@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,7 +15,6 @@
  */
 package io.netty.util;
 
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -70,12 +69,12 @@ import static io.netty.util.internal.StringUtil.simpleClassName;
  * <h3>Implementation Details</h3>
  *
  * {@link HashedWheelTimer} is based on
- * <a href="https://cseweb.ucsd.edu/users/varghese/">George Varghese</a> and
+ * <a href="http://cseweb.ucsd.edu/users/varghese/">George Varghese</a> and
  * Tony Lauck's paper,
- * <a href="https://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z">'Hashed
+ * <a href="http://cseweb.ucsd.edu/users/varghese/PAPERS/twheel.ps.Z">'Hashed
  * and Hierarchical Timing Wheels: data structures to efficiently implement a
  * timer facility'</a>.  More comprehensive slides are located
- * <a href="https://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt">here</a>.
+ * <a href="http://www.cse.wustl.edu/~cdgill/courses/cs6874/TimingWheels.ppt">here</a>.
  */
 public class HashedWheelTimer implements Timer {
 
@@ -85,7 +84,6 @@ public class HashedWheelTimer implements Timer {
     private static final AtomicInteger INSTANCE_COUNTER = new AtomicInteger();
     private static final AtomicBoolean WARNED_TOO_MANY_INSTANCES = new AtomicBoolean();
     private static final int INSTANCE_COUNT_LIMIT = 64;
-    private static final long MILLISECOND_NANOS = TimeUnit.MILLISECONDS.toNanos(1);
     private static final ResourceLeakDetector<HashedWheelTimer> leakDetector = ResourceLeakDetectorFactory.instance()
             .newResourceLeakDetector(HashedWheelTimer.class, 1);
 
@@ -130,7 +128,7 @@ public class HashedWheelTimer implements Timer {
      * @param tickDuration   the duration between tick
      * @param unit           the time unit of the {@code tickDuration}
      * @throws NullPointerException     if {@code unit} is {@code null}
-     * @throws IllegalArgumentException if {@code tickDuration} is &lt;= 0
+     * @throws IllegalArgumentException if {@code tickDuration} is <= 0
      */
     public HashedWheelTimer(long tickDuration, TimeUnit unit) {
         this(Executors.defaultThreadFactory(), tickDuration, unit);
@@ -144,7 +142,7 @@ public class HashedWheelTimer implements Timer {
      * @param unit           the time unit of the {@code tickDuration}
      * @param ticksPerWheel  the size of the wheel
      * @throws NullPointerException     if {@code unit} is {@code null}
-     * @throws IllegalArgumentException if either of {@code tickDuration} and {@code ticksPerWheel} is &lt;= 0
+     * @throws IllegalArgumentException if either of {@code tickDuration} and {@code ticksPerWheel} is <= 0
      */
     public HashedWheelTimer(long tickDuration, TimeUnit unit, int ticksPerWheel) {
         this(Executors.defaultThreadFactory(), tickDuration, unit, ticksPerWheel);
@@ -172,7 +170,7 @@ public class HashedWheelTimer implements Timer {
      * @param tickDuration   the duration between tick
      * @param unit           the time unit of the {@code tickDuration}
      * @throws NullPointerException     if either of {@code threadFactory} and {@code unit} is {@code null}
-     * @throws IllegalArgumentException if {@code tickDuration} is &lt;= 0
+     * @throws IllegalArgumentException if {@code tickDuration} is <= 0
      */
     public HashedWheelTimer(
             ThreadFactory threadFactory, long tickDuration, TimeUnit unit) {
@@ -189,7 +187,7 @@ public class HashedWheelTimer implements Timer {
      * @param unit           the time unit of the {@code tickDuration}
      * @param ticksPerWheel  the size of the wheel
      * @throws NullPointerException     if either of {@code threadFactory} and {@code unit} is {@code null}
-     * @throws IllegalArgumentException if either of {@code tickDuration} and {@code ticksPerWheel} is &lt;= 0
+     * @throws IllegalArgumentException if either of {@code tickDuration} and {@code ticksPerWheel} is <= 0
      */
     public HashedWheelTimer(
             ThreadFactory threadFactory,
@@ -243,33 +241,32 @@ public class HashedWheelTimer implements Timer {
             long tickDuration, TimeUnit unit, int ticksPerWheel, boolean leakDetection,
             long maxPendingTimeouts) {
 
-        ObjectUtil.checkNotNull(threadFactory, "threadFactory");
-        ObjectUtil.checkNotNull(unit, "unit");
-        ObjectUtil.checkPositive(tickDuration, "tickDuration");
-        ObjectUtil.checkPositive(ticksPerWheel, "ticksPerWheel");
+        if (threadFactory == null) {
+            throw new NullPointerException("threadFactory");
+        }
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
+        if (tickDuration <= 0) {
+            throw new IllegalArgumentException("tickDuration must be greater than 0: " + tickDuration);
+        }
+        if (ticksPerWheel <= 0) {
+            throw new IllegalArgumentException("ticksPerWheel must be greater than 0: " + ticksPerWheel);
+        }
 
         // Normalize ticksPerWheel to power of two and initialize the wheel.
         wheel = createWheel(ticksPerWheel);
         mask = wheel.length - 1;
 
         // Convert tickDuration to nanos.
-        long duration = unit.toNanos(tickDuration);
+        this.tickDuration = unit.toNanos(tickDuration);
 
         // Prevent overflow.
-        if (duration >= Long.MAX_VALUE / wheel.length) {
+        if (this.tickDuration >= Long.MAX_VALUE / wheel.length) {
             throw new IllegalArgumentException(String.format(
                     "tickDuration: %d (expected: 0 < tickDuration in nanos < %d",
                     tickDuration, Long.MAX_VALUE / wheel.length));
         }
-
-        if (duration < MILLISECOND_NANOS) {
-            logger.warn("Configured tickDuration {} smaller then {}, using 1ms.",
-                        tickDuration, MILLISECOND_NANOS);
-            this.tickDuration = MILLISECOND_NANOS;
-        } else {
-            this.tickDuration = duration;
-        }
-
         workerThread = threadFactory.newThread(worker);
 
         leak = leakDetection || !workerThread.isDaemon() ? leakDetector.track(this) : null;
@@ -401,8 +398,12 @@ public class HashedWheelTimer implements Timer {
 
     @Override
     public Timeout newTimeout(TimerTask task, long delay, TimeUnit unit) {
-        ObjectUtil.checkNotNull(task, "task");
-        ObjectUtil.checkNotNull(unit, "unit");
+        if (task == null) {
+            throw new NullPointerException("task");
+        }
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
 
         long pendingTimeoutsCount = pendingTimeouts.incrementAndGet();
 
@@ -418,11 +419,6 @@ public class HashedWheelTimer implements Timer {
         // Add the timeout to the timeout queue which will be processed on the next tick.
         // During processing all the queued HashedWheelTimeouts will be added to the correct HashedWheelBucket.
         long deadline = System.nanoTime() + unit.toNanos(delay) - startTime;
-
-        // Guard against overflow.
-        if (delay > 0 && deadline < 0) {
-            deadline = Long.MAX_VALUE;
-        }
         HashedWheelTimeout timeout = new HashedWheelTimeout(this, task, deadline);
         timeouts.add(timeout);
         return timeout;
@@ -436,12 +432,10 @@ public class HashedWheelTimer implements Timer {
     }
 
     private static void reportTooManyInstances() {
-        if (logger.isErrorEnabled()) {
-            String resourceType = simpleClassName(HashedWheelTimer.class);
-            logger.error("You are creating too many " + resourceType + " instances. " +
-                    resourceType + " is a shared resource that must be reused across the JVM, " +
-                    "so that only a few instances are created.");
-        }
+        String resourceType = simpleClassName(HashedWheelTimer.class);
+        logger.error("You are creating too many " + resourceType + " instances. " +
+                resourceType + " is a shared resource that must be reused across the JVM," +
+                "so that only a few instances are created.");
     }
 
     private final class Worker implements Runnable {
@@ -560,9 +554,6 @@ public class HashedWheelTimer implements Timer {
                 // See https://github.com/netty/netty/issues/356
                 if (PlatformDependent.isWindows()) {
                     sleepTimeMs = sleepTimeMs / 10 * 10;
-                    if (sleepTimeMs == 0) {
-                        sleepTimeMs = 1;
-                    }
                 }
 
                 try {

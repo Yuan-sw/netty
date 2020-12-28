@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,6 +17,7 @@ package io.netty.handler.codec.rtsp;
 
 import java.util.regex.Pattern;
 
+import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.DefaultFullHttpRequest;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpRequest;
@@ -26,7 +27,7 @@ import io.netty.handler.codec.http.HttpObjectDecoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 /**
- * Decodes {@link io.netty.buffer.ByteBuf}s into RTSP messages represented in
+ * Decodes {@link ByteBuf}s into RTSP messages represented in
  * {@link HttpMessage}s.
  * <p>
  * <h3>Parameters that prevents excessive memory consumption</h3>
@@ -39,18 +40,18 @@ import io.netty.handler.codec.http.HttpResponseStatus;
  * <td>The maximum length of the initial line
  *     (e.g. {@code "SETUP / RTSP/1.0"} or {@code "RTSP/1.0 200 OK"})
  *     If the length of the initial line exceeds this value, a
- *     {@link io.netty.handler.codec.TooLongFrameException} will be raised.</td>
+ *     {@link TooLongFrameException} will be raised.</td>
  * </tr>
  * <tr>
  * <td>{@code maxHeaderSize}</td>
  * <td>The maximum length of all headers. If the sum of the length of each
- *     header exceeds this value, a {@link io.netty.handler.codec.TooLongFrameException} will be
+ *     header exceeds this value, a {@link TooLongFrameException} will be
  *     raised.</td>
  * </tr>
  * <tr>
  * <td>{@code maxContentLength}</td>
  * <td>The maximum length of the content.  If the content length exceeds this
- *     value, a {@link io.netty.handler.codec.TooLongFrameException} will be raised.</td>
+ *     value, a {@link TooLongFrameException} will be raised.</td>
  * </tr>
  * </table>
  */
@@ -70,6 +71,16 @@ public class RtspDecoder extends HttpObjectDecoder {
      * Regex used on first line in message to detect if it is a response.
      */
     private static final Pattern versionPattern = Pattern.compile("RTSP/\\d\\.\\d");
+
+    /**
+     * Constant for default max initial line length.
+     */
+    public static final int DEFAULT_MAX_INITIAL_LINE_LENGTH = 4096;
+
+    /**
+     * Constant for default max header size.
+     */
+    public static final int DEFAULT_MAX_HEADER_SIZE = 8192;
 
     /**
      * Constant for default max content length.
@@ -141,17 +152,17 @@ public class RtspDecoder extends HttpObjectDecoder {
     protected boolean isContentAlwaysEmpty(final HttpMessage msg) {
         // Unlike HTTP, RTSP always assumes zero-length body if Content-Length
         // header is absent.
-        return super.isContentAlwaysEmpty(msg) || !msg.headers().contains(RtspHeaderNames.CONTENT_LENGTH);
+        return super.isContentAlwaysEmpty(msg) || !msg.headers().contains(RtspHeaders.Names.CONTENT_LENGTH);
     }
 
     @Override
     protected HttpMessage createInvalidMessage() {
         if (isDecodingRequest) {
             return new DefaultFullHttpRequest(RtspVersions.RTSP_1_0,
-                       RtspMethods.OPTIONS, "/bad-request", validateHeaders);
+                       RtspMethods.OPTIONS, "/bad-request", Unpooled.EMPTY_BUFFER, validateHeaders);
         } else {
             return new DefaultFullHttpResponse(RtspVersions.RTSP_1_0,
-                                               UNKNOWN_STATUS,
+                                               UNKNOWN_STATUS, Unpooled.EMPTY_BUFFER,
                                                validateHeaders);
         }
     }

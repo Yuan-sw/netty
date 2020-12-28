@@ -1,11 +1,11 @@
 /*
- * Copyright 2019 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,11 +19,8 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.handler.codec.TooLongFrameException;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.List;
-
-import static io.netty.buffer.ByteBufUtil.readBytes;
 
 /**
  * Decodes {@link ByteBuf}s into {@link WebSocketFrame}s.
@@ -51,17 +48,6 @@ public class WebSocket00FrameDecoder extends ReplayingDecoder<Void> implements W
      */
     public WebSocket00FrameDecoder(int maxFrameSize) {
         this.maxFrameSize = maxFrameSize;
-    }
-
-    /**
-     * Creates a new instance of {@code WebSocketFrameDecoder} with the specified {@code maxFrameSize}. If the client
-     * sends a frame size larger than {@code maxFrameSize}, the channel will be closed.
-     *
-     * @param decoderConfig
-     *            Frames decoder configuration.
-     */
-    public WebSocket00FrameDecoder(WebSocketDecoderConfig decoderConfig) {
-        this.maxFrameSize = ObjectUtil.checkNotNull(decoderConfig, "decoderConfig").maxFramePayloadLength();
     }
 
     @Override
@@ -108,9 +94,10 @@ public class WebSocket00FrameDecoder extends ReplayingDecoder<Void> implements W
 
         if (type == (byte) 0xFF && frameSize == 0) {
             receivedClosingHandshake = true;
-            return new CloseWebSocketFrame(true, 0, ctx.alloc().buffer(0));
+            return new CloseWebSocketFrame();
         }
-        ByteBuf payload = readBytes(ctx.alloc(), buffer, (int) frameSize);
+        ByteBuf payload = ctx.alloc().buffer((int) frameSize);
+        buffer.readBytes(payload);
         return new BinaryWebSocketFrame(payload);
     }
 
@@ -134,12 +121,12 @@ public class WebSocket00FrameDecoder extends ReplayingDecoder<Void> implements W
             throw new TooLongFrameException();
         }
 
-        ByteBuf binaryData = readBytes(ctx.alloc(), buffer, frameSize);
+        ByteBuf binaryData = ctx.alloc().buffer(frameSize);
+        buffer.readBytes(binaryData);
         buffer.skipBytes(1);
 
         int ffDelimPos = binaryData.indexOf(binaryData.readerIndex(), binaryData.writerIndex(), (byte) 0xFF);
         if (ffDelimPos >= 0) {
-            binaryData.release();
             throw new IllegalArgumentException("a text frame should not contain 0xFF.");
         }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,13 +16,26 @@
 package io.netty.channel.epoll;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.channel.ServerChannel;
+import io.netty.util.NetUtil;
+import io.netty.util.ReferenceCountUtil;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class EpollSocketChannelTest {
 
@@ -98,6 +111,98 @@ public class EpollSocketChannelTest {
         Assert.assertTrue(info.rcvRtt() >= 0);
         Assert.assertTrue(info.rcvSpace() >= 0);
         Assert.assertTrue(info.totalRetrans() >= 0);
+    }
+
+    @Test
+    public void testExceptionHandlingDoesNotInfiniteLoop() throws InterruptedException {
+        EventLoopGroup group = new EpollEventLoopGroup();
+        try {
+            runExceptionHandleFeedbackLoop(group, EpollServerSocketChannel.class, EpollSocketChannel.class,
+                    new InetSocketAddress(NetUtil.LOCALHOST, 0));
+            runExceptionHandleFeedbackLoop(group, EpollServerDomainSocketChannel.class, EpollDomainSocketChannel.class,
+                    EpollSocketTestPermutation.newSocketAddress());
+        } finally {
+            group.shutdownGracefully();
+        }
+    }
+
+    private void runExceptionHandleFeedbackLoop(EventLoopGroup group, Class<? extends ServerChannel> serverChannelClass,
+                                                Class<? extends Channel> channelClass, SocketAddress bindAddr)
+            throws InterruptedException {
+        Channel serverChannel = null;
+        Channel clientChannel = null;
+        try {
+            MyInitializer serverInitializer = new MyInitializer();
+            ServerBootstrap sb = new ServerBootstrap();
+            sb.option(ChannelOption.SO_BACKLOG, 1024);
+            sb.group(group)
+            .channel(serverChannelClass)
+            .childHandler(serverInitializer);
+
+            serverChannel = sb.bind(bindAddr).syncUninterruptibly().channel();
+
+            Bootstrap b = new Bootstrap();
+            b.group(group);
+            b.channel(channelClass);
+            b.handler(new MyInitializer());
+            clientChannel = b.connect(serverChannel.localAddress()).syncUninterruptibly().channel();
+
+            clientChannel.writeAndFlush(Unpooled.wrappedBuffer(new byte[1024]));
+
+            // We expect to get 2 exceptions (1 from BuggyChannelHandler and 1 from ExceptionHandler).
+            Assert.assertTrue(serverInitializer.exceptionHandler.latch1.await(2, TimeUnit.SECONDS));
+
+            // After we get the first exception, we should get no more, this is expected to timeout.
+            Assert.assertFalse("Encountered " + serverInitializer.exceptionHandler.count.get() +
+                    " exceptions when 1 was expected",
+                    serverInitializer.exceptionHandler.latch2.await(2, TimeUnit.SECONDS));
+        } finally {
+            if (serverChannel != null) {
+                serverChannel.close().syncUninterruptibly();
+            }
+            if (clientChannel != null) {
+                clientChannel.close().syncUninterruptibly();
+            }
+        }
+    }
+
+    private static class MyInitializer extends ChannelInitializer<Channel> {
+        final ExceptionHandler exceptionHandler = new ExceptionHandler();
+        @Override
+        protected void initChannel(Channel ch) throws Exception {
+            ChannelPipeline pipeline = ch.pipeline();
+
+            pipeline.addLast(new BuggyChannelHandler());
+            pipeline.addLast(exceptionHandler);
+        }
+    }
+
+    private static class BuggyChannelHandler extends ChannelInboundHandlerAdapter {
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
+            ReferenceCountUtil.release(msg);
+            throw new NullPointerException("I am a bug!");
+        }
+    }
+
+    private static class ExceptionHandler extends ChannelInboundHandlerAdapter {
+        final AtomicLong count = new AtomicLong();
+        /**
+         * We expect to get 1 call to {@link #exceptionCaught(ChannelHandlerContext, Throwable)}.
+         */
+        final CountDownLatch latch1 = new CountDownLatch(1);
+        final CountDownLatch latch2 = new CountDownLatch(1);
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+            if (count.incrementAndGet() <= 2) {
+                latch1.countDown();
+            } else {
+                latch2.countDown();
+            }
+            // This should not throw any exception.
+            ctx.close();
+        }
     }
 
     // See https://github.com/netty/netty/issues/7159

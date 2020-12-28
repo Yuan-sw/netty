@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,20 +15,18 @@
  */
 package io.netty.buffer;
 
-import io.netty.util.internal.ObjectPool;
-import io.netty.util.internal.ObjectPool.Handle;
-import io.netty.util.internal.ObjectPool.ObjectCreator;
+import io.netty.util.Recycler;
+import io.netty.util.Recycler.Handle;
 import io.netty.util.internal.PlatformDependent;
 
 final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
 
-    private static final ObjectPool<PooledUnsafeHeapByteBuf> RECYCLER = ObjectPool.newPool(
-            new ObjectCreator<PooledUnsafeHeapByteBuf>() {
+    private static final Recycler<PooledUnsafeHeapByteBuf> RECYCLER = new Recycler<PooledUnsafeHeapByteBuf>() {
         @Override
-        public PooledUnsafeHeapByteBuf newObject(Handle<PooledUnsafeHeapByteBuf> handle) {
+        protected PooledUnsafeHeapByteBuf newObject(Handle handle) {
             return new PooledUnsafeHeapByteBuf(handle, 0);
         }
-    });
+    };
 
     static PooledUnsafeHeapByteBuf newUnsafeInstance(int maxCapacity) {
         PooledUnsafeHeapByteBuf buf = RECYCLER.get();
@@ -36,7 +34,7 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
         return buf;
     }
 
-    private PooledUnsafeHeapByteBuf(Handle<PooledUnsafeHeapByteBuf> recyclerHandle, int maxCapacity) {
+    private PooledUnsafeHeapByteBuf(Handle recyclerHandle, int maxCapacity) {
         super(recyclerHandle, maxCapacity);
     }
 
@@ -51,18 +49,8 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
     }
 
     @Override
-    protected short _getShortLE(int index) {
-        return UnsafeByteBufUtil.getShortLE(memory, idx(index));
-    }
-
-    @Override
     protected int _getUnsignedMedium(int index) {
         return UnsafeByteBufUtil.getUnsignedMedium(memory, idx(index));
-    }
-
-    @Override
-    protected int _getUnsignedMediumLE(int index) {
-        return UnsafeByteBufUtil.getUnsignedMediumLE(memory, idx(index));
     }
 
     @Override
@@ -71,18 +59,8 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
     }
 
     @Override
-    protected int _getIntLE(int index) {
-        return UnsafeByteBufUtil.getIntLE(memory, idx(index));
-    }
-
-    @Override
     protected long _getLong(int index) {
         return UnsafeByteBufUtil.getLong(memory, idx(index));
-    }
-
-    @Override
-    protected long _getLongLE(int index) {
-        return UnsafeByteBufUtil.getLongLE(memory, idx(index));
     }
 
     @Override
@@ -96,18 +74,8 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
     }
 
     @Override
-    protected void _setShortLE(int index, int value) {
-        UnsafeByteBufUtil.setShortLE(memory, idx(index), value);
-    }
-
-    @Override
     protected void _setMedium(int index, int value) {
         UnsafeByteBufUtil.setMedium(memory, idx(index), value);
-    }
-
-    @Override
-    protected void _setMediumLE(int index, int value) {
-        UnsafeByteBufUtil.setMediumLE(memory, idx(index), value);
     }
 
     @Override
@@ -116,18 +84,13 @@ final class PooledUnsafeHeapByteBuf extends PooledHeapByteBuf {
     }
 
     @Override
-    protected void _setIntLE(int index, int value) {
-        UnsafeByteBufUtil.setIntLE(memory, idx(index), value);
-    }
-
-    @Override
     protected void _setLong(int index, long value) {
         UnsafeByteBufUtil.setLong(memory, idx(index), value);
     }
 
     @Override
-    protected void _setLongLE(int index, long value) {
-        UnsafeByteBufUtil.setLongLE(memory, idx(index), value);
+    protected Recycler<?> recycler() {
+        return RECYCLER;
     }
 
     @Override

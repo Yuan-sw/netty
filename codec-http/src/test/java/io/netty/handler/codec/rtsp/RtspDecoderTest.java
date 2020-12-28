@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -58,12 +58,14 @@ public class RtspDecoderTest {
         ch.writeInbound(Unpooled.wrappedBuffer(data1),
                         Unpooled.wrappedBuffer(data2));
 
-        HttpObject res1 = ch.readInbound();
+        HttpObject res1 =  (HttpObject) ch.readInbound();
+        System.out.println(res1);
         assertNotNull(res1);
         assertTrue(res1 instanceof FullHttpRequest);
         ((FullHttpRequest) res1).release();
 
-        HttpObject res2 = ch.readInbound();
+        HttpObject res2 = (HttpObject)  ch.readInbound();
+        System.out.println(res2);
         assertNotNull(res2);
         assertTrue(res2 instanceof FullHttpResponse);
         ((FullHttpResponse) res2).release();

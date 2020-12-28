@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,6 +15,8 @@
  */
 package io.netty.handler.codec.compression;
 
+import java.util.zip.Checksum;
+
 /**
  * Implements CRC32-C as defined in:
  * "Optimization of Cyclic Redundancy-CHeck Codes with 24 and 32 Parity Bits",
@@ -23,7 +25,7 @@ package io.netty.handler.codec.compression;
  * The implementation of this class has been sourced from the Appendix of RFC 3309,
  * but with masking due to Java not being able to support unsigned types.
  */
-class Crc32c extends ByteBufChecksum {
+class Crc32c implements Checksum {
     private static final int[] CRC_TABLE = {
             0x00000000, 0xF26B8303, 0xE13B70F7, 0x1350F3F4,
             0xC79A971F, 0x35F1141C, 0x26A1E7E8, 0xD4CA64EB,
@@ -103,9 +105,8 @@ class Crc32c extends ByteBufChecksum {
 
     @Override
     public void update(byte[] buffer, int offset, int length) {
-        int end = offset + length;
-        for (int i = offset; i < end; i++) {
-            update(buffer[i]);
+        for (int i = offset; i < offset + length; i++) {
+            crc = crc32c(crc, buffer[i]);
         }
     }
 

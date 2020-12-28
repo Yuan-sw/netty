@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,6 @@
 package io.netty.channel.socket.oio;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.AddressedEnvelope;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
@@ -54,9 +53,7 @@ import java.util.Locale;
  *
  * @see AddressedEnvelope
  * @see DatagramPacket
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
 public class OioDatagramChannel extends AbstractOioMessageChannel
                                 implements DatagramChannel {
 
@@ -73,6 +70,8 @@ public class OioDatagramChannel extends AbstractOioMessageChannel
     private final MulticastSocket socket;
     private final OioDatagramChannelConfig config;
     private final java.net.DatagramPacket tmpPacket = new java.net.DatagramPacket(EmptyArrays.EMPTY_BYTES, 0);
+
+    private RecvByteBufAllocator.Handle allocHandle;
 
     private static MulticastSocket newSocket() {
         try {
@@ -123,7 +122,7 @@ public class OioDatagramChannel extends AbstractOioMessageChannel
     /**
      * {@inheritDoc}
      *
-     * This can be safely cast to {@link OioDatagramChannelConfig}.
+     * This can be safetly cast to {@link OioDatagramChannelConfig}.
      */
     @Override
     // TODO: Change return type to OioDatagramChannelConfig in next major release
@@ -209,7 +208,10 @@ public class OioDatagramChannel extends AbstractOioMessageChannel
     @Override
     protected int doReadMessages(List<Object> buf) throws Exception {
         DatagramChannelConfig config = config();
-        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+        RecvByteBufAllocator.Handle allocHandle = this.allocHandle;
+        if (allocHandle == null) {
+            this.allocHandle = allocHandle = config.getRecvByteBufAllocator().newHandle();
+        }
 
         ByteBuf data = config.getAllocator().heapBuffer(allocHandle.guess());
         boolean free = true;
@@ -221,8 +223,9 @@ public class OioDatagramChannel extends AbstractOioMessageChannel
 
             InetSocketAddress remoteAddr = (InetSocketAddress) tmpPacket.getSocketAddress();
 
-            allocHandle.lastBytesRead(tmpPacket.getLength());
-            buf.add(new DatagramPacket(data.writerIndex(allocHandle.lastBytesRead()), localAddress(), remoteAddr));
+            int readBytes = tmpPacket.getLength();
+            allocHandle.record(readBytes);
+            buf.add(new DatagramPacket(data.writerIndex(readBytes), localAddress(), remoteAddr));
             free = false;
             return 1;
         } catch (SocketTimeoutException e) {
@@ -279,7 +282,9 @@ public class OioDatagramChannel extends AbstractOioMessageChannel
                 if (data.hasArray()) {
                     tmpPacket.setData(data.array(), data.arrayOffset() + data.readerIndex(), length);
                 } else {
-                    tmpPacket.setData(ByteBufUtil.getBytes(data, data.readerIndex(), length));
+                    byte[] tmp = new byte[length];
+                    data.getBytes(data.readerIndex(), tmp);
+                    tmpPacket.setData(tmp);
                 }
                 socket.send(tmpPacket);
                 in.remove();

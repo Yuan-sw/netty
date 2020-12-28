@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,40 +21,26 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.netty.handler.codec.http.DefaultFullHttpResponse;
-import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.EmptyHttpHeaders;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpClientCodec;
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpObjectAggregator;
 import io.netty.handler.codec.http.HttpRequestEncoder;
 import io.netty.handler.codec.http.HttpResponseDecoder;
-import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
 import io.netty.util.CharsetUtil;
-
+import io.netty.util.internal.PlatformDependent;
 import org.junit.Test;
 
 import java.net.URI;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 public abstract class WebSocketClientHandshakerTest {
-    protected abstract WebSocketClientHandshaker newHandshaker(URI uri, String subprotocol, HttpHeaders headers,
-                                                               boolean absoluteUpgradeUrl);
-
-    protected WebSocketClientHandshaker newHandshaker(URI uri) {
-        return newHandshaker(uri, null, null, false);
-    }
+    protected abstract WebSocketClientHandshaker newHandshaker(URI uri);
 
     protected abstract CharSequence getOriginHeaderName();
-
-    protected abstract CharSequence getProtocolHeaderName();
-
-    protected abstract CharSequence[] getHandshakeRequiredHeaderNames();
 
     @Test
     public void hostHeaderWs() {
@@ -164,21 +150,8 @@ public abstract class WebSocketClientHandshakerTest {
         testOriginHeader("//LOCALHOST/", "http://localhost");
     }
 
-    @Test
-    public void testSetOriginFromCustomHeaders() {
-        HttpHeaders customHeaders = new DefaultHttpHeaders().set(getOriginHeaderName(), "http://example.com");
-        WebSocketClientHandshaker handshaker = newHandshaker(URI.create("ws://server.example.com/chat"), null,
-                                                             customHeaders, false);
-        FullHttpRequest request = handshaker.newHandshakeRequest();
-        try {
-            assertEquals("http://example.com", request.headers().get(getOriginHeaderName()));
-        } finally {
-            request.release();
-        }
-    }
-
     private void testHostHeader(String uri, String expected) {
-        testHeaderDefaultHttp(uri, HttpHeaderNames.HOST, expected);
+        testHeaderDefaultHttp(uri, HttpHeaders.Names.HOST, expected);
     }
 
     private void testOriginHeader(String uri, String expected) {
@@ -197,7 +170,7 @@ public abstract class WebSocketClientHandshakerTest {
 
     @Test
     @SuppressWarnings("deprecation")
-    public void testUpgradeUrl() {
+    public void testRawPath() {
         URI uri = URI.create("ws://localhost:9999/path%20with%20ws");
         WebSocketClientHandshaker handshaker = newHandshaker(uri);
         FullHttpRequest request = handshaker.newHandshakeRequest();
@@ -209,48 +182,12 @@ public abstract class WebSocketClientHandshakerTest {
     }
 
     @Test
-    public void testUpgradeUrlWithQuery() {
+    public void testRawPathWithQuery() {
         URI uri = URI.create("ws://localhost:9999/path%20with%20ws?a=b%20c");
         WebSocketClientHandshaker handshaker = newHandshaker(uri);
         FullHttpRequest request = handshaker.newHandshakeRequest();
         try {
-            assertEquals("/path%20with%20ws?a=b%20c", request.uri());
-        } finally {
-            request.release();
-        }
-    }
-
-    @Test
-    public void testUpgradeUrlWithoutPath() {
-        URI uri = URI.create("ws://localhost:9999");
-        WebSocketClientHandshaker handshaker = newHandshaker(uri);
-        FullHttpRequest request = handshaker.newHandshakeRequest();
-        try {
-            assertEquals("/", request.uri());
-        } finally {
-            request.release();
-        }
-    }
-
-    @Test
-    public void testUpgradeUrlWithoutPathWithQuery() {
-        URI uri = URI.create("ws://localhost:9999?a=b%20c");
-        WebSocketClientHandshaker handshaker = newHandshaker(uri);
-        FullHttpRequest request = handshaker.newHandshakeRequest();
-        try {
-            assertEquals("/?a=b%20c", request.uri());
-        } finally {
-            request.release();
-        }
-    }
-
-    @Test
-    public void testAbsoluteUpgradeUrlWithQuery() {
-        URI uri = URI.create("ws://localhost:9999/path%20with%20ws?a=b%20c");
-        WebSocketClientHandshaker handshaker = newHandshaker(uri, null, null, true);
-        FullHttpRequest request = handshaker.newHandshakeRequest();
-        try {
-            assertEquals("ws://localhost:9999/path%20with%20ws?a=b%20c", request.uri());
+            assertEquals("/path%20with%20ws?a=b%20c", request.getUri());
         } finally {
             request.release();
         }
@@ -270,7 +207,7 @@ public abstract class WebSocketClientHandshakerTest {
         String url = "ws://localhost:9999/ws";
         final WebSocketClientHandshaker shaker = newHandshaker(URI.create(url));
         final WebSocketClientHandshaker handshaker = new WebSocketClientHandshaker(
-                shaker.uri(), shaker.version(), null, EmptyHttpHeaders.INSTANCE, Integer.MAX_VALUE, -1) {
+                shaker.uri(), shaker.version(), null, HttpHeaders.EMPTY_HEADERS, Integer.MAX_VALUE) {
             @Override
             protected FullHttpRequest newHandshakeRequest() {
                 return shaker.newHandshakeRequest();
@@ -293,15 +230,13 @@ public abstract class WebSocketClientHandshakerTest {
             }
         };
 
-        // use randomBytes helper from utils to check that it functions properly
-        byte[] data = WebSocketUtil.randomBytes(24);
+        byte[] data = new byte[24];
+        PlatformDependent.threadLocalRandom().nextBytes(data);
 
         // Create a EmbeddedChannel which we will use to encode a BinaryWebsocketFrame to bytes and so use these
         // to test the actual handshaker.
         WebSocketServerHandshakerFactory factory = new WebSocketServerHandshakerFactory(url, null, false);
-        FullHttpRequest request = shaker.newHandshakeRequest();
-        WebSocketServerHandshaker socketServerHandshaker = factory.newHandshaker(request);
-        request.release();
+        WebSocketServerHandshaker socketServerHandshaker = factory.newHandshaker(shaker.newHandshakeRequest());
         EmbeddedChannel websocketChannel = new EmbeddedChannel(socketServerHandshaker.newWebSocketEncoder(),
                 socketServerHandshaker.newWebsocketDecoder());
         assertTrue(websocketChannel.writeOutbound(new BinaryWebSocketFrame(Unpooled.wrappedBuffer(data))));
@@ -311,7 +246,7 @@ public abstract class WebSocketClientHandshakerTest {
         CompositeByteBuf compositeByteBuf = Unpooled.compositeBuffer();
         compositeByteBuf.addComponent(true, Unpooled.wrappedBuffer(bytes));
         for (;;) {
-            ByteBuf frameBytes = websocketChannel.readOutbound();
+            ByteBuf frameBytes = (ByteBuf) websocketChannel.readOutbound();
             if (frameBytes == null) {
                 break;
             }
@@ -336,7 +271,7 @@ public abstract class WebSocketClientHandshakerTest {
         shaker.handshake(ch).syncUninterruptibly();
         for (;;) {
             // Just consume the bytes, we are not interested in these.
-            ByteBuf buf = ch.readOutbound();
+            ByteBuf buf = (ByteBuf) ch.readOutbound();
             if (buf == null) {
                 break;
             }
@@ -345,7 +280,7 @@ public abstract class WebSocketClientHandshakerTest {
         assertTrue(ch.writeInbound(compositeByteBuf));
         assertTrue(ch.finish());
 
-        BinaryWebSocketFrame frame = ch.readInbound();
+        BinaryWebSocketFrame frame = (BinaryWebSocketFrame) ch.readInbound();
         ByteBuf expect = Unpooled.wrappedBuffer(data);
         try {
             assertEquals(expect, frame.content());
@@ -356,58 +291,4 @@ public abstract class WebSocketClientHandshakerTest {
             frame.release();
         }
     }
-
-    @Test
-    public void testDuplicateWebsocketHandshakeHeaders() {
-        URI uri = URI.create("ws://localhost:9999/foo");
-
-        HttpHeaders inputHeaders = new DefaultHttpHeaders();
-        String bogusSubProtocol = "bogusSubProtocol";
-        String bogusHeaderValue = "bogusHeaderValue";
-
-        // add values for the headers that are reserved for use in the websockets handshake
-        for (CharSequence header : getHandshakeRequiredHeaderNames()) {
-            if (!HttpHeaderNames.HOST.equals(header)) {
-                inputHeaders.add(header, bogusHeaderValue);
-            }
-        }
-        inputHeaders.add(getProtocolHeaderName(), bogusSubProtocol);
-
-        String realSubProtocol = "realSubProtocol";
-        WebSocketClientHandshaker handshaker = newHandshaker(uri, realSubProtocol, inputHeaders, false);
-        FullHttpRequest request = handshaker.newHandshakeRequest();
-        HttpHeaders outputHeaders = request.headers();
-
-        // the header values passed in originally have been replaced with values generated by the Handshaker
-        for (CharSequence header : getHandshakeRequiredHeaderNames()) {
-            assertEquals(1, outputHeaders.getAll(header).size());
-            assertNotEquals(bogusHeaderValue, outputHeaders.get(header));
-        }
-
-        // the subprotocol header value is that of the subprotocol string passed into the Handshaker
-        assertEquals(1, outputHeaders.getAll(getProtocolHeaderName()).size());
-        assertEquals(realSubProtocol, outputHeaders.get(getProtocolHeaderName()));
-
-        request.release();
-    }
-
-    @Test
-    public void testWebSocketClientHandshakeException() {
-        URI uri = URI.create("ws://localhost:9999/exception");
-        WebSocketClientHandshaker handshaker = newHandshaker(uri, null, null, false);
-        FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.UNAUTHORIZED);
-        response.headers().set(HttpHeaderNames.WWW_AUTHENTICATE, "realm = access token required");
-
-        try {
-            handshaker.finishHandshake(null, response);
-        } catch (WebSocketClientHandshakeException exception) {
-            assertEquals("Invalid handshake response getStatus: 401 Unauthorized", exception.getMessage());
-            assertEquals(HttpResponseStatus.UNAUTHORIZED, exception.response().status());
-            assertTrue(exception.response().headers().contains(HttpHeaderNames.WWW_AUTHENTICATE,
-                                                               "realm = access token required", false));
-        } finally {
-            response.release();
-        }
-    }
 }
-

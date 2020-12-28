@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,21 +18,13 @@ package io.netty.channel.rxtx;
 import gnu.io.CommPort;
 import gnu.io.CommPortIdentifier;
 import gnu.io.SerialPort;
-import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.oio.OioByteStreamChannel;
 
 import java.net.SocketAddress;
 import java.util.concurrent.TimeUnit;
 
-import static io.netty.channel.rxtx.RxtxChannelOption.BAUD_RATE;
-import static io.netty.channel.rxtx.RxtxChannelOption.DATA_BITS;
-import static io.netty.channel.rxtx.RxtxChannelOption.DTR;
-import static io.netty.channel.rxtx.RxtxChannelOption.PARITY_BIT;
-import static io.netty.channel.rxtx.RxtxChannelOption.READ_TIMEOUT;
-import static io.netty.channel.rxtx.RxtxChannelOption.RTS;
-import static io.netty.channel.rxtx.RxtxChannelOption.STOP_BITS;
-import static io.netty.channel.rxtx.RxtxChannelOption.WAIT_TIME;
+import static io.netty.channel.rxtx.RxtxChannelOption.*;
 
 /**
  * A channel to a serial device using the RXTX library.
@@ -137,16 +129,6 @@ public class RxtxChannel extends OioByteStreamChannel {
                 serialPort = null;
             }
         }
-    }
-
-    @Override
-    protected boolean isInputShutdown() {
-        return !open;
-    }
-
-    @Override
-    protected ChannelFuture shutdownInput() {
-        return newFailedFuture(new UnsupportedOperationException("shutdownInput"));
     }
 
     private final class RxtxUnsafe extends AbstractUnsafe {

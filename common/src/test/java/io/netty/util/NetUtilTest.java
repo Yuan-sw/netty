@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,7 +18,6 @@ package io.netty.util;
 import io.netty.util.internal.StringUtil;
 import org.junit.Test;
 
-import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -26,6 +25,10 @@ import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Map.Entry;
+
+import static io.netty.util.NetUtil.getByName;
+import static io.netty.util.NetUtil.toAddressString;
+import static io.netty.util.NetUtil.toSocketAddressString;
 
 import static io.netty.util.NetUtil.*;
 import static org.junit.Assert.assertEquals;
@@ -383,7 +386,7 @@ public class NetUtilTest {
     private static final Map<byte[], String> ipv6ToAddressStrings = new HashMap<byte[], String>() {
         private static final long serialVersionUID = 2999763170377573184L;
         {
-            // From the RFC 5952 https://tools.ietf.org/html/rfc5952#section-4
+            // From the RFC 5952 http://tools.ietf.org/html/rfc5952#section-4
             put(new byte[] {
                         32, 1, 13, -72,
                         0, 0, 0, 0,
@@ -701,34 +704,17 @@ public class NetUtilTest {
     }
 
     @Test
-    public void testBytesToIpAddress() throws UnknownHostException {
-        for (Entry<String, String> e : validIpV4Hosts.entrySet()) {
-            assertEquals(e.getKey(), bytesToIpAddress(createByteArrayFromIpAddressString(e.getKey())));
-            assertEquals(e.getKey(), bytesToIpAddress(validIpV4ToBytes(e.getKey())));
-        }
-        for (Entry<byte[], String> testEntry : ipv6ToAddressStrings.entrySet()) {
-            assertEquals(testEntry.getValue(), bytesToIpAddress(testEntry.getKey()));
-        }
-    }
-
-    @Test
     public void testIp6AddressToString() throws UnknownHostException {
         for (Entry<byte[], String> testEntry : ipv6ToAddressStrings.entrySet()) {
-            assertEquals(testEntry.getValue(), toAddressString(InetAddress.getByAddress(testEntry.getKey())));
+            assertEquals(testEntry.getValue(), NetUtil.toAddressString(InetAddress.getByAddress(testEntry.getKey())));
         }
     }
 
     @Test
     public void testIp4AddressToString() throws UnknownHostException {
         for (Entry<String, String> e : validIpV4Hosts.entrySet()) {
-            assertEquals(e.getKey(), toAddressString(InetAddress.getByAddress(unhex(e.getValue()))));
+            assertEquals(e.getKey(), NetUtil.toAddressString(InetAddress.getByAddress(unhex(e.getValue()))));
         }
-    }
-
-    @Test
-    public void testIPv4ToInt() throws UnknownHostException {
-        assertEquals(2130706433, ipv4AddressToInt((Inet4Address) InetAddress.getByName("127.0.0.1")));
-        assertEquals(-1062731519, ipv4AddressToInt((Inet4Address) InetAddress.getByName("192.168.1.1")));
     }
 
     @Test

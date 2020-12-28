@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,11 +23,11 @@ import com.barchart.udt.nio.RendezvousChannelUDT;
 import com.barchart.udt.nio.SelectorProviderUDT;
 import com.barchart.udt.nio.ServerSocketChannelUDT;
 import com.barchart.udt.nio.SocketChannelUDT;
+import io.netty.bootstrap.ChannelFactory;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelFactory;
-import io.netty.channel.udt.UdtChannel;
 import io.netty.channel.udt.UdtServerChannel;
+import io.netty.channel.udt.UdtChannel;
 
 import java.io.IOException;
 import java.nio.channels.spi.SelectorProvider;
@@ -206,35 +206,35 @@ public final class NioUdtProvider<T extends UdtChannel> implements ChannelFactor
     @Override
     public T newChannel() {
         switch (kind) {
-            case ACCEPTOR:
-                switch (type) {
-                    case DATAGRAM:
-                        return (T) new NioUdtMessageAcceptorChannel();
-                    case STREAM:
-                        return (T) new NioUdtByteAcceptorChannel();
-                    default:
-                        throw new IllegalStateException("wrong type=" + type);
-                }
-            case CONNECTOR:
-                switch (type) {
-                    case DATAGRAM:
-                        return (T) new NioUdtMessageConnectorChannel();
-                    case STREAM:
-                        return (T) new NioUdtByteConnectorChannel();
-                    default:
-                        throw new IllegalStateException("wrong type=" + type);
-                }
-            case RENDEZVOUS:
-                switch (type) {
-                    case DATAGRAM:
-                        return (T) new NioUdtMessageRendezvousChannel();
-                    case STREAM:
-                        return (T) new NioUdtByteRendezvousChannel();
-                    default:
-                        throw new IllegalStateException("wrong type=" + type);
-                }
+        case ACCEPTOR:
+            switch (type) {
+            case DATAGRAM:
+                return (T) new NioUdtMessageAcceptorChannel();
+            case STREAM:
+                return (T) new NioUdtByteAcceptorChannel();
             default:
-                throw new IllegalStateException("wrong kind=" + kind);
+                throw new IllegalStateException("wrong type=" + type);
+            }
+        case CONNECTOR:
+            switch (type) {
+            case DATAGRAM:
+                return (T) new NioUdtMessageConnectorChannel();
+            case STREAM:
+                return (T) new NioUdtByteConnectorChannel();
+            default:
+                throw new IllegalStateException("wrong type=" + type);
+            }
+        case RENDEZVOUS:
+            switch (type) {
+            case DATAGRAM:
+                return (T) new NioUdtMessageRendezvousChannel();
+            case STREAM:
+                return (T) new NioUdtByteRendezvousChannel();
+            default:
+                throw new IllegalStateException("wrong type=" + type);
+            }
+        default:
+            throw new IllegalStateException("wrong kind=" + kind);
         }
     }
 
@@ -244,4 +244,5 @@ public final class NioUdtProvider<T extends UdtChannel> implements ChannelFactor
     public TypeUDT type() {
         return type;
     }
+
 }

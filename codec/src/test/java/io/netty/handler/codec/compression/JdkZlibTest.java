@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,10 +20,11 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.util.CharsetUtil;
 import io.netty.util.ReferenceCountUtil;
-import org.apache.commons.compress.utils.IOUtils;
 import org.junit.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 import java.util.Queue;
 
@@ -38,8 +39,8 @@ public class JdkZlibTest extends ZlibTest {
     }
 
     @Override
-    protected ZlibDecoder createDecoder(ZlibWrapper wrapper, int maxAllocation) {
-        return new JdkZlibDecoder(wrapper, maxAllocation);
+    protected ZlibDecoder createDecoder(ZlibWrapper wrapper) {
+        return new JdkZlibDecoder(wrapper);
     }
 
     @Test(expected = DecompressionException.class)
@@ -54,7 +55,7 @@ public class JdkZlibTest extends ZlibTest {
         EmbeddedChannel chDecoderGZip = new EmbeddedChannel(createDecoder(ZlibWrapper.GZIP));
 
         try {
-            byte[] bytes = IOUtils.toByteArray(getClass().getResourceAsStream("/multiple.gz"));
+            byte[] bytes = toByteArray(getClass().getResourceAsStream("/multiple.gz"));
 
             assertTrue(chDecoderGZip.writeInbound(Unpooled.copiedBuffer(bytes)));
             Queue<Object> messages = chDecoderGZip.inboundMessages();
@@ -74,7 +75,7 @@ public class JdkZlibTest extends ZlibTest {
         EmbeddedChannel chDecoderGZip = new EmbeddedChannel(new JdkZlibDecoder(true));
 
         try {
-            byte[] bytes = IOUtils.toByteArray(getClass().getResourceAsStream("/multiple.gz"));
+            byte[] bytes = toByteArray(getClass().getResourceAsStream("/multiple.gz"));
 
             assertTrue(chDecoderGZip.writeInbound(Unpooled.copiedBuffer(bytes)));
             Queue<Object> messages = chDecoderGZip.inboundMessages();
@@ -88,6 +89,21 @@ public class JdkZlibTest extends ZlibTest {
         } finally {
             assertFalse(chDecoderGZip.finish());
             chDecoderGZip.close();
+        }
+    }
+
+    private static byte[] toByteArray(InputStream in) throws IOException {
+        try {
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] array = new byte[1024];
+
+            int read;
+            while ((read = in.read(array)) != -1) {
+                out.write(array, 0, read);
+            }
+            return out.toByteArray();
+        } finally {
+            in.close();
         }
     }
 }

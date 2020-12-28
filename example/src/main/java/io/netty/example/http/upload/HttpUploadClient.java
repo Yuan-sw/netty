@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,16 +21,14 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.codec.http.ClientCookieEncoder;
+import io.netty.handler.codec.http.DefaultCookie;
 import io.netty.handler.codec.http.DefaultHttpRequest;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpVersion;
 import io.netty.handler.codec.http.QueryStringEncoder;
-import io.netty.handler.codec.http.cookie.ClientCookieEncoder;
-import io.netty.handler.codec.http.cookie.DefaultCookie;
 import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
 import io.netty.handler.codec.http.multipart.DiskAttribute;
 import io.netty.handler.codec.http.multipart.DiskFileUpload;
@@ -118,14 +116,14 @@ public final class HttpUploadClient {
             // Simple Get form: no factory used (not usable)
             List<Entry<String, String>> headers = formget(b, host, port, get, uriSimple);
             if (headers == null) {
-                factory.cleanAllHttpData();
+                factory.cleanAllHttpDatas();
                 return;
             }
 
             // Simple Post form: factory used for big attributes
             List<InterfaceHttpData> bodylist = formpost(b, host, port, uriSimple, file, factory, headers);
             if (bodylist == null) {
-                factory.cleanAllHttpData();
+                factory.cleanAllHttpDatas();
                 return;
             }
 
@@ -136,7 +134,7 @@ public final class HttpUploadClient {
             group.shutdownGracefully();
 
             // Really clean all temporary files if they still exist
-            factory.cleanAllHttpData();
+            factory.cleanAllHttpDatas();
         }
     }
 
@@ -166,34 +164,34 @@ public final class HttpUploadClient {
         URI uriGet = new URI(encoder.toString());
         HttpRequest request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, uriGet.toASCIIString());
         HttpHeaders headers = request.headers();
-        headers.set(HttpHeaderNames.HOST, host);
-        headers.set(HttpHeaderNames.CONNECTION, HttpHeaderValues.CLOSE);
-        headers.set(HttpHeaderNames.ACCEPT_ENCODING, HttpHeaderValues.GZIP + "," + HttpHeaderValues.DEFLATE);
+        headers.set(HttpHeaders.Names.HOST, host);
+        headers.set(HttpHeaders.Names.CONNECTION, HttpHeaders.Values.CLOSE);
+        headers.set(HttpHeaders.Names.ACCEPT_ENCODING, HttpHeaders.Values.GZIP + ',' + HttpHeaders.Values.DEFLATE);
 
-        headers.set(HttpHeaderNames.ACCEPT_CHARSET, "ISO-8859-1,utf-8;q=0.7,*;q=0.7");
-        headers.set(HttpHeaderNames.ACCEPT_LANGUAGE, "fr");
-        headers.set(HttpHeaderNames.REFERER, uriSimple.toString());
-        headers.set(HttpHeaderNames.USER_AGENT, "Netty Simple Http Client side");
-        headers.set(HttpHeaderNames.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
+        headers.set(HttpHeaders.Names.ACCEPT_CHARSET, "ISO-8859-1,utf-8;q=0.7,*;q=0.7");
+        headers.set(HttpHeaders.Names.ACCEPT_LANGUAGE, "fr");
+        headers.set(HttpHeaders.Names.REFERER, uriSimple.toString());
+        headers.set(HttpHeaders.Names.USER_AGENT, "Netty Simple Http Client side");
+        headers.set(HttpHeaders.Names.ACCEPT, "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
 
         //connection will not close but needed
         // headers.set("Connection","keep-alive");
         // headers.set("Keep-Alive","300");
 
         headers.set(
-                HttpHeaderNames.COOKIE, ClientCookieEncoder.STRICT.encode(
+                HttpHeaders.Names.COOKIE, ClientCookieEncoder.encode(
                         new DefaultCookie("my-cookie", "foo"),
                         new DefaultCookie("another-cookie", "bar"))
         );
 
         // send request
+        List<Entry<String, String>> entries = headers.entries();
         channel.writeAndFlush(request);
 
         // Wait for the server to close the connection.
         channel.closeFuture().sync();
 
-        // convert headers to list
-        return headers.entries();
+        return entries;
     }
 
     /**
@@ -264,7 +262,7 @@ public final class HttpUploadClient {
      */
     private static void formpostmultipart(
             Bootstrap bootstrap, String host, int port, URI uriFile, HttpDataFactory factory,
-            Iterable<Entry<String, String>> headers, List<InterfaceHttpData> bodylist) throws Exception {
+            List<Entry<String, String>> headers, List<InterfaceHttpData> bodylist) throws Exception {
         // XXX /formpostmultipart
         // Start the connection attempt.
         ChannelFuture future = bootstrap.connect(SocketUtils.socketAddress(host, port));

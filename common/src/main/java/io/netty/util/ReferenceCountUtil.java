@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -26,10 +26,6 @@ public final class ReferenceCountUtil {
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(ReferenceCountUtil.class);
 
-    static {
-        ResourceLeakDetector.addExclusions(ReferenceCountUtil.class, "touch");
-    }
-
     /**
      * Try to call {@link ReferenceCounted#retain()} if the specified message implements {@link ReferenceCounted}.
      * If the specified message doesn't implement {@link ReferenceCounted}, this method does nothing.
@@ -43,38 +39,13 @@ public final class ReferenceCountUtil {
     }
 
     /**
-     * Try to call {@link ReferenceCounted#retain(int)} if the specified message implements {@link ReferenceCounted}.
+     * Try to call {@link ReferenceCounted#retain()} if the specified message implements {@link ReferenceCounted}.
      * If the specified message doesn't implement {@link ReferenceCounted}, this method does nothing.
      */
     @SuppressWarnings("unchecked")
     public static <T> T retain(T msg, int increment) {
         if (msg instanceof ReferenceCounted) {
             return (T) ((ReferenceCounted) msg).retain(increment);
-        }
-        return msg;
-    }
-
-    /**
-     * Tries to call {@link ReferenceCounted#touch()} if the specified message implements {@link ReferenceCounted}.
-     * If the specified message doesn't implement {@link ReferenceCounted}, this method does nothing.
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> T touch(T msg) {
-        if (msg instanceof ReferenceCounted) {
-            return (T) ((ReferenceCounted) msg).touch();
-        }
-        return msg;
-    }
-
-    /**
-     * Tries to call {@link ReferenceCounted#touch(Object)} if the specified message implements
-     * {@link ReferenceCounted}.  If the specified message doesn't implement {@link ReferenceCounted},
-     * this method does nothing.
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> T touch(T msg, Object hint) {
-        if (msg instanceof ReferenceCounted) {
-            return (T) ((ReferenceCounted) msg).touch(hint);
         }
         return msg;
     }

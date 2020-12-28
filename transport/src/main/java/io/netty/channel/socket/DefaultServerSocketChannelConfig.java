@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,18 +21,13 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.util.NetUtil;
-import io.netty.util.internal.ObjectUtil;
 
 import java.net.ServerSocket;
 import java.net.SocketException;
 import java.util.Map;
 
-import static io.netty.channel.ChannelOption.SO_BACKLOG;
-import static io.netty.channel.ChannelOption.SO_RCVBUF;
-import static io.netty.channel.ChannelOption.SO_REUSEADDR;
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
+import static io.netty.channel.ChannelOption.*;
 
 /**
  * The default {@link ServerSocketChannelConfig} implementation.
@@ -48,7 +43,10 @@ public class DefaultServerSocketChannelConfig extends DefaultChannelConfig
      */
     public DefaultServerSocketChannelConfig(ServerSocketChannel channel, ServerSocket javaSocket) {
         super(channel);
-        this.javaSocket = ObjectUtil.checkNotNull(javaSocket, "javaSocket");
+        if (javaSocket == null) {
+            throw new NullPointerException("javaSocket");
+        }
+        this.javaSocket = javaSocket;
     }
 
     @Override
@@ -140,7 +138,9 @@ public class DefaultServerSocketChannelConfig extends DefaultChannelConfig
 
     @Override
     public ServerSocketChannelConfig setBacklog(int backlog) {
-        checkPositiveOrZero(backlog, "backlog");
+        if (backlog < 0) {
+            throw new IllegalArgumentException("backlog: " + backlog);
+        }
         this.backlog = backlog;
         return this;
     }
@@ -152,7 +152,6 @@ public class DefaultServerSocketChannelConfig extends DefaultChannelConfig
     }
 
     @Override
-    @Deprecated
     public ServerSocketChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead) {
         super.setMaxMessagesPerRead(maxMessagesPerRead);
         return this;
@@ -191,12 +190,6 @@ public class DefaultServerSocketChannelConfig extends DefaultChannelConfig
     @Override
     public ServerSocketChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
         super.setWriteBufferLowWaterMark(writeBufferLowWaterMark);
-        return this;
-    }
-
-    @Override
-    public ServerSocketChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark) {
-        super.setWriteBufferWaterMark(writeBufferWaterMark);
         return this;
     }
 

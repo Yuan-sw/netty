@@ -5,7 +5,7 @@
 * version 2.0 (the "License"); you may not use this file except in compliance
 * with the License. You may obtain a copy of the License at:
 *
-*   https://www.apache.org/licenses/LICENSE-2.0
+*   http://www.apache.org/licenses/LICENSE-2.0
 *
 * Unless required by applicable law or agreed to in writing, software
 * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,12 +23,23 @@ final class DefaultChannelHandlerContext extends AbstractChannelHandlerContext {
 
     DefaultChannelHandlerContext(
             DefaultChannelPipeline pipeline, EventExecutor executor, String name, ChannelHandler handler) {
-        super(pipeline, executor, name, handler.getClass());
+        super(pipeline, executor, name, isInbound(handler), isOutbound(handler));
+        if (handler == null) {
+            throw new NullPointerException("handler");
+        }
         this.handler = handler;
     }
 
     @Override
     public ChannelHandler handler() {
         return handler;
+    }
+
+    private static boolean isInbound(ChannelHandler handler) {
+        return handler instanceof ChannelInboundHandler;
+    }
+
+    private static boolean isOutbound(ChannelHandler handler) {
+        return handler instanceof ChannelOutboundHandler;
     }
 }

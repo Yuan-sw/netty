@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,20 +15,22 @@
  */
 package io.netty.channel.local;
 
-import io.netty.channel.DefaultEventLoopGroup;
+import io.netty.channel.MultithreadEventLoopGroup;
+import io.netty.util.concurrent.EventExecutor;
 
 import java.util.concurrent.ThreadFactory;
 
 /**
- * @deprecated Use {@link DefaultEventLoopGroup} instead.
+ * {@link MultithreadEventLoopGroup} which must be used for the local transport.
  */
-@Deprecated
-public class LocalEventLoopGroup extends DefaultEventLoopGroup {
+public class LocalEventLoopGroup extends MultithreadEventLoopGroup {
 
     /**
      * Create a new instance with the default number of threads.
      */
-    public LocalEventLoopGroup() { }
+    public LocalEventLoopGroup() {
+        this(0);
+    }
 
     /**
      * Create a new instance
@@ -36,16 +38,7 @@ public class LocalEventLoopGroup extends DefaultEventLoopGroup {
      * @param nThreads          the number of threads to use
      */
     public LocalEventLoopGroup(int nThreads) {
-        super(nThreads);
-    }
-
-    /**
-     * Create a new instance with the default number of threads and the given {@link ThreadFactory}.
-     *
-     * @param threadFactory     the {@link ThreadFactory} or {@code null} to use the default
-     */
-    public LocalEventLoopGroup(ThreadFactory threadFactory) {
-        super(0, threadFactory);
+        this(nThreads, null);
     }
 
     /**
@@ -56,5 +49,11 @@ public class LocalEventLoopGroup extends DefaultEventLoopGroup {
      */
     public LocalEventLoopGroup(int nThreads, ThreadFactory threadFactory) {
         super(nThreads, threadFactory);
+    }
+
+    @Override
+    protected EventExecutor newChild(
+            ThreadFactory threadFactory, Object... args) throws Exception {
+        return new LocalEventLoop(this, threadFactory);
     }
 }

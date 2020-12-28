@@ -1,11 +1,11 @@
 /*
- * Copyright 2019 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,19 +23,21 @@ import io.netty.channel.ChannelPromise;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders.Names;
+import io.netty.handler.codec.http.HttpHeaders.Values;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
 import java.util.regex.Pattern;
 
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
+import static io.netty.handler.codec.http.HttpHeaders.Names.*;
+import static io.netty.handler.codec.http.HttpHeaders.Values.*;
+import static io.netty.handler.codec.http.HttpVersion.*;
 
 /**
  * <p>
  * Performs server side opening and closing handshakes for web socket specification version <a
- * href="https://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-00" >draft-ietf-hybi-thewebsocketprotocol-
+ * href="http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-00" >draft-ietf-hybi-thewebsocketprotocol-
  * 00</a>
  * </p>
  * <p>
@@ -60,32 +62,15 @@ public class WebSocketServerHandshaker00 extends WebSocketServerHandshaker {
      *            reduce denial of service attacks using long data frames.
      */
     public WebSocketServerHandshaker00(String webSocketURL, String subprotocols, int maxFramePayloadLength) {
-        this(webSocketURL, subprotocols, WebSocketDecoderConfig.newBuilder()
-            .maxFramePayloadLength(maxFramePayloadLength)
-            .build());
-    }
-
-    /**
-     * Constructor specifying the destination web socket location
-     *
-     * @param webSocketURL
-     *            URL for web socket communications. e.g "ws://myhost.com/mypath". Subsequent web socket frames will be
-     *            sent to this URL.
-     * @param subprotocols
-     *            CSV of supported protocols
-     * @param decoderConfig
-     *            Frames decoder configuration.
-     */
-    public WebSocketServerHandshaker00(String webSocketURL, String subprotocols, WebSocketDecoderConfig decoderConfig) {
-        super(WebSocketVersion.V00, webSocketURL, subprotocols, decoderConfig);
+        super(WebSocketVersion.V00, webSocketURL, subprotocols, maxFramePayloadLength);
     }
 
     /**
      * <p>
      * Handle the web socket handshake for the web socket specification <a href=
-     * "https://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-00">HyBi version 0</a> and lower. This standard
-     * is really a rehash of <a href="https://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76" >hixie-76</a> and
-     * <a href="https://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75" >hixie-75</a>.
+     * "http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-00">HyBi version 0</a> and lower. This standard
+     * is really a rehash of <a href="http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-76" >hixie-76</a> and
+     * <a href="http://tools.ietf.org/html/draft-hixie-thewebsocketprotocol-75" >hixie-75</a>.
      * </p>
      *
      * <p>
@@ -124,40 +109,30 @@ public class WebSocketServerHandshaker00 extends WebSocketServerHandshaker {
     protected FullHttpResponse newHandshakeResponse(FullHttpRequest req, HttpHeaders headers) {
 
         // Serve the WebSocket handshake request.
-        if (!req.headers().containsValue(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE, true)
-                || !HttpHeaderValues.WEBSOCKET.contentEqualsIgnoreCase(req.headers().get(HttpHeaderNames.UPGRADE))) {
-            throw new WebSocketServerHandshakeException("not a WebSocket handshake request: missing upgrade", req);
+        if (!req.headers().containsValue(CONNECTION, Values.UPGRADE, true)
+                || !WEBSOCKET.equalsIgnoreCase(req.headers().get(Names.UPGRADE))) {
+            throw new WebSocketHandshakeException("not a WebSocket handshake request: missing upgrade");
         }
 
         // Hixie 75 does not contain these headers while Hixie 76 does
-        boolean isHixie76 = req.headers().contains(HttpHeaderNames.SEC_WEBSOCKET_KEY1) &&
-                            req.headers().contains(HttpHeaderNames.SEC_WEBSOCKET_KEY2);
-
-        String origin = req.headers().get(HttpHeaderNames.ORIGIN);
-        //throw before allocating FullHttpResponse
-        if (origin == null && !isHixie76) {
-            throw new WebSocketServerHandshakeException("Missing origin header, got only " + req.headers().names(),
-                                                        req);
-        }
+        boolean isHixie76 = req.headers().contains(SEC_WEBSOCKET_KEY1) && req.headers().contains(SEC_WEBSOCKET_KEY2);
 
         // Create the WebSocket handshake response.
         FullHttpResponse res = new DefaultFullHttpResponse(HTTP_1_1, new HttpResponseStatus(101,
-                isHixie76 ? "WebSocket Protocol Handshake" : "Web Socket Protocol Handshake"),
-                req.content().alloc().buffer(0));
+                isHixie76 ? "WebSocket Protocol Handshake" : "Web Socket Protocol Handshake"));
         if (headers != null) {
             res.headers().add(headers);
         }
 
-        res.headers().set(HttpHeaderNames.UPGRADE, HttpHeaderValues.WEBSOCKET)
-                     .set(HttpHeaderNames.CONNECTION, HttpHeaderValues.UPGRADE);
+        res.headers().add(Names.UPGRADE, WEBSOCKET);
+        res.headers().add(CONNECTION, Values.UPGRADE);
 
         // Fill in the headers and contents depending on handshake getMethod.
         if (isHixie76) {
             // New handshake getMethod with a challenge:
-            res.headers().add(HttpHeaderNames.SEC_WEBSOCKET_ORIGIN, origin);
-            res.headers().add(HttpHeaderNames.SEC_WEBSOCKET_LOCATION, uri());
-
-            String subprotocols = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL);
+            res.headers().add(SEC_WEBSOCKET_ORIGIN, req.headers().get(ORIGIN));
+            res.headers().add(SEC_WEBSOCKET_LOCATION, uri());
+            String subprotocols = req.headers().get(SEC_WEBSOCKET_PROTOCOL);
             if (subprotocols != null) {
                 String selectedSubprotocol = selectSubprotocol(subprotocols);
                 if (selectedSubprotocol == null) {
@@ -165,31 +140,30 @@ public class WebSocketServerHandshaker00 extends WebSocketServerHandshaker {
                         logger.debug("Requested subprotocol(s) not supported: {}", subprotocols);
                     }
                 } else {
-                    res.headers().set(HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL, selectedSubprotocol);
+                    res.headers().add(SEC_WEBSOCKET_PROTOCOL, selectedSubprotocol);
                 }
             }
 
             // Calculate the answer of the challenge.
-            String key1 = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_KEY1);
-            String key2 = req.headers().get(HttpHeaderNames.SEC_WEBSOCKET_KEY2);
+            String key1 = req.headers().get(SEC_WEBSOCKET_KEY1);
+            String key2 = req.headers().get(SEC_WEBSOCKET_KEY2);
             int a = (int) (Long.parseLong(BEGINNING_DIGIT.matcher(key1).replaceAll("")) /
                            BEGINNING_SPACE.matcher(key1).replaceAll("").length());
             int b = (int) (Long.parseLong(BEGINNING_DIGIT.matcher(key2).replaceAll("")) /
                            BEGINNING_SPACE.matcher(key2).replaceAll("").length());
             long c = req.content().readLong();
-            ByteBuf input = Unpooled.wrappedBuffer(new byte[16]).setIndex(0, 0);
+            ByteBuf input = Unpooled.buffer(16);
             input.writeInt(a);
             input.writeInt(b);
             input.writeLong(c);
             res.content().writeBytes(WebSocketUtil.md5(input.array()));
         } else {
             // Old Hixie 75 handshake getMethod with no challenge:
-            res.headers().add(HttpHeaderNames.WEBSOCKET_ORIGIN, origin);
-            res.headers().add(HttpHeaderNames.WEBSOCKET_LOCATION, uri());
-
-            String protocol = req.headers().get(HttpHeaderNames.WEBSOCKET_PROTOCOL);
+            res.headers().add(WEBSOCKET_ORIGIN, req.headers().get(ORIGIN));
+            res.headers().add(WEBSOCKET_LOCATION, uri());
+            String protocol = req.headers().get(WEBSOCKET_PROTOCOL);
             if (protocol != null) {
-                res.headers().set(HttpHeaderNames.WEBSOCKET_PROTOCOL, selectSubprotocol(protocol));
+                res.headers().add(WEBSOCKET_PROTOCOL, selectSubprotocol(protocol));
             }
         }
         return res;
@@ -210,7 +184,7 @@ public class WebSocketServerHandshaker00 extends WebSocketServerHandshaker {
 
     @Override
     protected WebSocketFrameDecoder newWebsocketDecoder() {
-        return new WebSocket00FrameDecoder(decoderConfig());
+        return new WebSocket00FrameDecoder(maxFramePayloadLength());
     }
 
     @Override

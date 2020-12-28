@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,39 +18,25 @@ package io.netty.channel;
 import io.netty.util.concurrent.AbstractFuture;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.internal.ObjectUtil;
-import io.netty.util.internal.UnstableApi;
 
 import java.util.concurrent.TimeUnit;
 
-@UnstableApi
-public final class VoidChannelPromise extends AbstractFuture<Void> implements ChannelPromise {
+final class VoidChannelPromise extends AbstractFuture<Void> implements ChannelPromise {
 
     private final Channel channel;
-    // Will be null if we should not propagate exceptions through the pipeline on failure case.
-    private final ChannelFutureListener fireExceptionListener;
+    private final boolean fireException;
 
     /**
      * Creates a new instance.
      *
      * @param channel the {@link Channel} associated with this future
      */
-    public VoidChannelPromise(final Channel channel, boolean fireException) {
-        ObjectUtil.checkNotNull(channel, "channel");
-        this.channel = channel;
-        if (fireException) {
-            fireExceptionListener = new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture future) throws Exception {
-                    Throwable cause = future.cause();
-                    if (cause != null) {
-                        fireException0(cause);
-                    }
-                }
-            };
-        } else {
-            fireExceptionListener = null;
+    VoidChannelPromise(Channel channel, boolean fireException) {
+        if (channel == null) {
+            throw new NullPointerException("channel");
         }
+        this.channel = channel;
+        this.fireException = fireException;
     }
 
     @Override
@@ -161,10 +147,9 @@ public final class VoidChannelPromise extends AbstractFuture<Void> implements Ch
         fail();
         return this;
     }
-
     @Override
     public VoidChannelPromise setFailure(Throwable cause) {
-        fireException0(cause);
+        fireException(cause);
         return this;
     }
 
@@ -175,7 +160,7 @@ public final class VoidChannelPromise extends AbstractFuture<Void> implements Ch
 
     @Override
     public boolean tryFailure(Throwable cause) {
-        fireException0(cause);
+        fireException(cause);
         return false;
     }
 
@@ -213,26 +198,12 @@ public final class VoidChannelPromise extends AbstractFuture<Void> implements Ch
         return null;
     }
 
-    @Override
-    public ChannelPromise unvoid() {
-        ChannelPromise promise = new DefaultChannelPromise(channel);
-        if (fireExceptionListener != null) {
-            promise.addListener(fireExceptionListener);
-        }
-        return promise;
-    }
-
-    @Override
-    public boolean isVoid() {
-        return true;
-    }
-
-    private void fireException0(Throwable cause) {
+    private void fireException(Throwable cause) {
         // Only fire the exception if the channel is open and registered
         // if not the pipeline is not setup and so it would hit the tail
         // of the pipeline.
         // See https://github.com/netty/netty/issues/1517
-        if (fireExceptionListener != null && channel.isRegistered()) {
+        if (fireException && channel.isRegistered()) {
             channel.pipeline().fireExceptionCaught(cause);
         }
     }

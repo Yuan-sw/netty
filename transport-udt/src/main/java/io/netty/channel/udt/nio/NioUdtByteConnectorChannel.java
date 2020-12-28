@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,9 +20,8 @@ import com.barchart.udt.nio.SocketChannelUDT;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelMetadata;
 import io.netty.channel.FileRegion;
-import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.nio.AbstractNioByteChannel;
 import io.netty.channel.udt.DefaultUdtChannelConfig;
 import io.netty.channel.udt.UdtChannel;
@@ -38,7 +37,7 @@ import java.security.AccessController;
 import java.security.PrivilegedActionException;
 import java.security.PrivilegedExceptionAction;
 
-import static java.nio.channels.SelectionKey.OP_CONNECT;
+import static java.nio.channels.SelectionKey.*;
 
 /**
  * Byte Channel Connector for UDT Streams.
@@ -50,6 +49,8 @@ public class NioUdtByteConnectorChannel extends AbstractNioByteChannel implement
 
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(NioUdtByteConnectorChannel.class);
+
+    private static final ChannelMetadata METADATA = new ChannelMetadata(false);
 
     private final UdtChannelConfig config;
 
@@ -143,20 +144,13 @@ public class NioUdtByteConnectorChannel extends AbstractNioByteChannel implement
 
     @Override
     protected int doReadBytes(final ByteBuf byteBuf) throws Exception {
-        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
-        allocHandle.attemptedBytesRead(byteBuf.writableBytes());
-        return byteBuf.writeBytes(javaChannel(), allocHandle.attemptedBytesRead());
+        return byteBuf.writeBytes(javaChannel(), byteBuf.writableBytes());
     }
 
     @Override
     protected int doWriteBytes(final ByteBuf byteBuf) throws Exception {
         final int expectedWrittenBytes = byteBuf.readableBytes();
         return byteBuf.readBytes(javaChannel(), expectedWrittenBytes);
-    }
-
-    @Override
-    protected ChannelFuture shutdownInput() {
-        return newFailedFuture(new UnsupportedOperationException("shutdownInput"));
     }
 
     @Override
@@ -178,6 +172,11 @@ public class NioUdtByteConnectorChannel extends AbstractNioByteChannel implement
     @Override
     protected SocketAddress localAddress0() {
         return javaChannel().socket().getLocalSocketAddress();
+    }
+
+    @Override
+    public ChannelMetadata metadata() {
+        return METADATA;
     }
 
     @Override

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,7 +21,6 @@ import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelId;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.EventLoop;
 import io.netty.channel.ServerChannel;
@@ -101,13 +100,6 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
     String name();
 
     /**
-     * Returns the {@link Channel} which has the specified {@link ChannelId}.
-     *
-     * @return the matching {@link Channel} if found. {@code null} otherwise.
-     */
-    Channel find(ChannelId id);
-
-    /**
      * Writes the specified {@code message} to all {@link Channel}s in this
      * group. If the specified {@code message} is an instance of
      * {@link ByteBuf}, it is automatically
@@ -121,7 +113,7 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
 
     /**
      * Writes the specified {@code message} to all {@link Channel}s in this
-     * group that are matched by the given {@link ChannelMatcher}. If the specified {@code message} is an instance of
+     * group that match the given {@link ChannelMatcher}. If the specified {@code message} is an instance of
      * {@link ByteBuf}, it is automatically
      * {@linkplain ByteBuf#duplicate() duplicated} to avoid a race
      * condition. The same is true for {@link ByteBufHolder}. Please note that this operation is asynchronous as
@@ -131,22 +123,6 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
      *         the operation is done for all channels
      */
     ChannelGroupFuture write(Object message, ChannelMatcher matcher);
-
-    /**
-     * Writes the specified {@code message} to all {@link Channel}s in this
-     * group that are matched by the given {@link ChannelMatcher}. If the specified {@code message} is an instance of
-     * {@link ByteBuf}, it is automatically
-     * {@linkplain ByteBuf#duplicate() duplicated} to avoid a race
-     * condition. The same is true for {@link ByteBufHolder}. Please note that this operation is asynchronous as
-     * {@link Channel#write(Object)} is.
-     *
-     * If {@code voidPromise} is {@code true} {@link Channel#voidPromise()} is used for the writes and so the same
-     * restrictions to the returned {@link ChannelGroupFuture} apply as to a void promise.
-     *
-     * @return the {@link ChannelGroupFuture} instance that notifies when
-     *         the operation is done for all channels
-     */
-    ChannelGroupFuture write(Object message, ChannelMatcher matcher, boolean voidPromise);
 
     /**
      * Flush all {@link Channel}s in this
@@ -162,7 +138,7 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
     ChannelGroup flush();
 
     /**
-     * Flush all {@link Channel}s in this group that are matched by the given {@link ChannelMatcher}.
+     * Flush all {@link Channel}s in this group that match the given {@link ChannelMatcher}.
      * If the specified {@code messages} are an instance of
      * {@link ByteBuf}, it is automatically
      * {@linkplain ByteBuf#duplicate() duplicated} to avoid a race
@@ -187,15 +163,9 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
 
     /**
      * Shortcut for calling {@link #write(Object)} and {@link #flush()} and only act on
-     * {@link Channel}s that are matched by the {@link ChannelMatcher}.
+     * {@link Channel}s that match the {@link ChannelMatcher}.
      */
     ChannelGroupFuture writeAndFlush(Object message, ChannelMatcher matcher);
-
-    /**
-     * Shortcut for calling {@link #write(Object, ChannelMatcher, boolean)} and {@link #flush()} and only act on
-     * {@link Channel}s that are matched by the {@link ChannelMatcher}.
-     */
-    ChannelGroupFuture writeAndFlush(Object message, ChannelMatcher matcher, boolean voidPromise);
 
     /**
      * @deprecated Use {@link #writeAndFlush(Object, ChannelMatcher)} instead.
@@ -213,7 +183,7 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
 
     /**
      * Disconnects all {@link Channel}s in this group from their remote peers,
-     * that are matched by the given {@link ChannelMatcher}.
+     * that match the given {@link ChannelMatcher}.
      *
      * @return the {@link ChannelGroupFuture} instance that notifies when
      *         the operation is done for all channels
@@ -231,7 +201,7 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
     ChannelGroupFuture close();
 
     /**
-     * Closes all {@link Channel}s in this group that are matched by the given {@link ChannelMatcher}.
+     * Closes all {@link Channel}s in this group that match the given {@link ChannelMatcher}.
      * If the {@link Channel} is  connected to a remote peer or bound to a local address, it is
      * automatically disconnected and unbound.
      *
@@ -255,7 +225,7 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
     /**
      * @deprecated This method will be removed in the next major feature release.
      *
-     * Deregister all {@link Channel}s in this group from their {@link EventLoop} that are matched by the given
+     * Deregister all {@link Channel}s in this group from their {@link EventLoop} that match the given
      * {@link ChannelMatcher}. Please note that this operation is asynchronous as {@link Channel#deregister()} is.
      *
      * @return the {@link ChannelGroupFuture} instance that notifies when
@@ -263,16 +233,4 @@ public interface ChannelGroup extends Set<Channel>, Comparable<ChannelGroup> {
      */
     @Deprecated
     ChannelGroupFuture deregister(ChannelMatcher matcher);
-
-    /**
-     * Returns the {@link ChannelGroupFuture} which will be notified when all {@link Channel}s that are part of this
-     * {@link ChannelGroup}, at the time of calling, are closed.
-     */
-    ChannelGroupFuture newCloseFuture();
-
-    /**
-     * Returns the {@link ChannelGroupFuture} which will be notified when all {@link Channel}s that are part of this
-     * {@link ChannelGroup}, at the time of calling, are closed.
-     */
-    ChannelGroupFuture newCloseFuture(ChannelMatcher matcher);
 }

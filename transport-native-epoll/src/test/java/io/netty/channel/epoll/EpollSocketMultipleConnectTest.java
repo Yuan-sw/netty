@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -33,7 +33,7 @@ public class EpollSocketMultipleConnectTest extends SocketMultipleConnectTest {
                 = new ArrayList<TestsuitePermutation.BootstrapComboFactory<ServerBootstrap, Bootstrap>>();
         for (TestsuitePermutation.BootstrapComboFactory<ServerBootstrap, Bootstrap> comboFactory
                 : EpollSocketTestPermutation.INSTANCE.socket()) {
-            EventLoopGroup group = comboFactory.newClientInstance().config().group();
+            EventLoopGroup group = comboFactory.newClientInstance().group();
             if (group instanceof NioEventLoopGroup || group instanceof EpollEventLoopGroup) {
                 factories.add(comboFactory);
             }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelPromise;
 import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoop;
@@ -39,13 +38,12 @@ import java.net.SocketTimeoutException;
 
 /**
  * A {@link SocketChannel} which is using Old-Blocking-IO
- *
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
-public class OioSocketChannel extends OioByteStreamChannel implements SocketChannel {
+public class OioSocketChannel extends OioByteStreamChannel
+                              implements SocketChannel {
 
-    private static final InternalLogger logger = InternalLoggerFactory.getInstance(OioSocketChannel.class);
+    private static final InternalLogger logger =
+            InternalLoggerFactory.getInstance(OioSocketChannel.class);
 
     private final Socket socket;
     private final OioSocketChannelConfig config;
@@ -119,18 +117,13 @@ public class OioSocketChannel extends OioByteStreamChannel implements SocketChan
     }
 
     @Override
+    public boolean isInputShutdown() {
+        return super.isInputShutdown();
+    }
+
+    @Override
     public boolean isOutputShutdown() {
         return socket.isOutputShutdown() || !isActive();
-    }
-
-    @Override
-    public boolean isInputShutdown() {
-        return socket.isInputShutdown() || !isActive();
-    }
-
-    @Override
-    public boolean isShutdown() {
-        return socket.isInputShutdown() && socket.isOutputShutdown() || !isActive();
     }
 
     @UnstableApi
@@ -142,16 +135,6 @@ public class OioSocketChannel extends OioByteStreamChannel implements SocketChan
     @Override
     public ChannelFuture shutdownOutput() {
         return shutdownOutput(newPromise());
-    }
-
-    @Override
-    public ChannelFuture shutdownInput() {
-        return shutdownInput(newPromise());
-    }
-
-    @Override
-    public ChannelFuture shutdown() {
-        return shutdown(newPromise());
     }
 
     @Override
@@ -193,79 +176,6 @@ public class OioSocketChannel extends OioByteStreamChannel implements SocketChan
 
     private void shutdownOutput0() throws IOException {
         socket.shutdownOutput();
-    }
-
-    @Override
-    public ChannelFuture shutdownInput(final ChannelPromise promise) {
-        EventLoop loop = eventLoop();
-        if (loop.inEventLoop()) {
-            shutdownInput0(promise);
-        } else {
-            loop.execute(new Runnable() {
-                @Override
-                public void run() {
-                    shutdownInput0(promise);
-                }
-            });
-        }
-        return promise;
-    }
-
-    private void shutdownInput0(ChannelPromise promise) {
-        try {
-            socket.shutdownInput();
-            promise.setSuccess();
-        } catch (Throwable t) {
-            promise.setFailure(t);
-        }
-    }
-
-    @Override
-    public ChannelFuture shutdown(final ChannelPromise promise) {
-        ChannelFuture shutdownOutputFuture = shutdownOutput();
-        if (shutdownOutputFuture.isDone()) {
-            shutdownOutputDone(shutdownOutputFuture, promise);
-        } else {
-            shutdownOutputFuture.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(final ChannelFuture shutdownOutputFuture) throws Exception {
-                    shutdownOutputDone(shutdownOutputFuture, promise);
-                }
-            });
-        }
-        return promise;
-    }
-
-    private void shutdownOutputDone(final ChannelFuture shutdownOutputFuture, final ChannelPromise promise) {
-        ChannelFuture shutdownInputFuture = shutdownInput();
-        if (shutdownInputFuture.isDone()) {
-            shutdownDone(shutdownOutputFuture, shutdownInputFuture, promise);
-        } else {
-            shutdownInputFuture.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture shutdownInputFuture) throws Exception {
-                    shutdownDone(shutdownOutputFuture, shutdownInputFuture, promise);
-                }
-            });
-        }
-    }
-
-    private static void shutdownDone(ChannelFuture shutdownOutputFuture,
-                                     ChannelFuture shutdownInputFuture,
-                                     ChannelPromise promise) {
-        Throwable shutdownOutputCause = shutdownOutputFuture.cause();
-        Throwable shutdownInputCause = shutdownInputFuture.cause();
-        if (shutdownOutputCause != null) {
-            if (shutdownInputCause != null) {
-                logger.debug("Exception suppressed because a previous exception occurred.",
-                        shutdownInputCause);
-            }
-            promise.setFailure(shutdownOutputCause);
-        } else if (shutdownInputCause != null) {
-            promise.setFailure(shutdownInputCause);
-        } else {
-            promise.setSuccess();
-        }
     }
 
     @Override
@@ -326,6 +236,7 @@ public class OioSocketChannel extends OioByteStreamChannel implements SocketChan
         socket.close();
     }
 
+    @Override
     protected boolean checkInputShutdown() {
         if (isInputShutdown()) {
             try {
@@ -338,13 +249,8 @@ public class OioSocketChannel extends OioByteStreamChannel implements SocketChan
         return false;
     }
 
-    @Deprecated
     @Override
     protected void setReadPending(boolean readPending) {
         super.setReadPending(readPending);
-    }
-
-    final void clearReadPending0() {
-        clearReadPending();
     }
 }

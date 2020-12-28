@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,8 +16,8 @@
 
 package io.netty.util.internal;
 
-import io.netty.util.internal.ObjectPool.Handle;
-import io.netty.util.internal.ObjectPool.ObjectCreator;
+import io.netty.util.Recycler;
+import io.netty.util.Recycler.Handle;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -33,13 +33,12 @@ public final class RecyclableArrayList extends ArrayList<Object> {
 
     private static final int DEFAULT_INITIAL_CAPACITY = 8;
 
-    private static final ObjectPool<RecyclableArrayList> RECYCLER = ObjectPool.newPool(
-            new ObjectCreator<RecyclableArrayList>() {
+    private static final Recycler<RecyclableArrayList> RECYCLER = new Recycler<RecyclableArrayList>() {
         @Override
-        public RecyclableArrayList newObject(Handle<RecyclableArrayList> handle) {
+        protected RecyclableArrayList newObject(Handle handle) {
             return new RecyclableArrayList(handle);
         }
-    });
+    };
 
     private boolean insertSinceRecycled;
 
@@ -59,13 +58,13 @@ public final class RecyclableArrayList extends ArrayList<Object> {
         return ret;
     }
 
-    private final Handle<RecyclableArrayList> handle;
+    private final Handle handle;
 
-    private RecyclableArrayList(Handle<RecyclableArrayList> handle) {
+    private RecyclableArrayList(Handle handle) {
         this(handle, DEFAULT_INITIAL_CAPACITY);
     }
 
-    private RecyclableArrayList(Handle<RecyclableArrayList> handle, int initialCapacity) {
+    private RecyclableArrayList(Handle handle, int initialCapacity) {
         super(initialCapacity);
         this.handle = handle;
     }
@@ -111,7 +110,10 @@ public final class RecyclableArrayList extends ArrayList<Object> {
 
     @Override
     public boolean add(Object element) {
-        if (super.add(ObjectUtil.checkNotNull(element, "element"))) {
+        if (element == null) {
+            throw new NullPointerException("element");
+        }
+        if (super.add(element)) {
             insertSinceRecycled = true;
             return true;
         }
@@ -120,13 +122,19 @@ public final class RecyclableArrayList extends ArrayList<Object> {
 
     @Override
     public void add(int index, Object element) {
-        super.add(index, ObjectUtil.checkNotNull(element, "element"));
+        if (element == null) {
+            throw new NullPointerException("element");
+        }
+        super.add(index, element);
         insertSinceRecycled = true;
     }
 
     @Override
     public Object set(int index, Object element) {
-        Object old = super.set(index, ObjectUtil.checkNotNull(element, "element"));
+        if (element == null) {
+            throw new NullPointerException("element");
+        }
+        Object old = super.set(index, element);
         insertSinceRecycled = true;
         return old;
     }
@@ -144,7 +152,6 @@ public final class RecyclableArrayList extends ArrayList<Object> {
     public boolean recycle() {
         clear();
         insertSinceRecycled = false;
-        handle.recycle(this);
-        return true;
+        return RECYCLER.recycle(this, handle);
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,6 +23,6 @@ public class EpollAbstractDomainSocketEchoTest extends EpollDomainSocketEchoTest
     @Override
     protected SocketAddress newSocketAddress() {
         // these don't actually show up in the file system so creating a temp file isn't reliable
-        return new DomainSocketAddress("\0" + System.getProperty("java.io.tmpdir") + UUID.randomUUID());
+        return new DomainSocketAddress("\0/tmp/" + UUID.randomUUID());
     }
 }

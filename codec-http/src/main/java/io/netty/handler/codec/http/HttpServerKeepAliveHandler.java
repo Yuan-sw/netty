@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,7 +21,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
 
-import static io.netty.handler.codec.http.HttpUtil.*;
+import static io.netty.handler.codec.http.HttpHeaders.*;
 
 /**
  * HttpServerKeepAliveHandler helps close persistent connections when appropriate.
@@ -82,7 +82,7 @@ public class HttpServerKeepAliveHandler extends ChannelDuplexHandler {
             }
         }
         if (msg instanceof LastHttpContent && !shouldKeepAlive()) {
-            promise = promise.unvoid().addListener(ChannelFutureListener.CLOSE);
+            promise.addListener(ChannelFutureListener.CLOSE);
         }
         super.write(ctx, msg, promise);
     }
@@ -113,15 +113,16 @@ public class HttpServerKeepAliveHandler extends ChannelDuplexHandler {
      */
     private static boolean isSelfDefinedMessageLength(HttpResponse response) {
         return isContentLengthSet(response) || isTransferEncodingChunked(response) || isMultipart(response) ||
-               isInformational(response) || response.status().code() == HttpResponseStatus.NO_CONTENT.code();
+               isInformational(response) || response.getStatus().code() == HttpResponseStatus.NO_CONTENT.code();
     }
 
     private static boolean isInformational(HttpResponse response) {
-        return response.status().codeClass() == HttpStatusClass.INFORMATIONAL;
+        int status = response.getStatus().code();
+        return status >= 100 && status <= 199;
     }
 
     private static boolean isMultipart(HttpResponse response) {
-        String contentType = response.headers().get(HttpHeaderNames.CONTENT_TYPE);
+        String contentType = response.headers().get(Names.CONTENT_TYPE);
         return contentType != null &&
                contentType.regionMatches(true, 0, MULTIPART_PREFIX, 0, MULTIPART_PREFIX.length());
     }

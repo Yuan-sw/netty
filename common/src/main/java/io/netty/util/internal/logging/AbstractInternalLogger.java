@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,7 +15,6 @@
  */
 package io.netty.util.internal.logging;
 
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.StringUtil;
 
 import java.io.ObjectStreamException;
@@ -30,15 +29,16 @@ public abstract class AbstractInternalLogger implements InternalLogger, Serializ
 
     private static final long serialVersionUID = -6382972526573193470L;
 
-    static final String EXCEPTION_MESSAGE = "Unexpected exception:";
-
     private final String name;
 
     /**
      * Creates a new instance.
      */
     protected AbstractInternalLogger(String name) {
-        this.name = ObjectUtil.checkNotNull(name, "name");
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        this.name = name;
     }
 
     @Override
@@ -65,31 +65,6 @@ public abstract class AbstractInternalLogger implements InternalLogger, Serializ
     }
 
     @Override
-    public void trace(Throwable t) {
-        trace(EXCEPTION_MESSAGE, t);
-    }
-
-    @Override
-    public void debug(Throwable t) {
-        debug(EXCEPTION_MESSAGE, t);
-    }
-
-    @Override
-    public void info(Throwable t) {
-        info(EXCEPTION_MESSAGE, t);
-    }
-
-    @Override
-    public void warn(Throwable t) {
-        warn(EXCEPTION_MESSAGE, t);
-    }
-
-    @Override
-    public void error(Throwable t) {
-        error(EXCEPTION_MESSAGE, t);
-    }
-
-    @Override
     public void log(InternalLogLevel level, String msg, Throwable cause) {
         switch (level) {
         case TRACE:
@@ -109,29 +84,6 @@ public abstract class AbstractInternalLogger implements InternalLogger, Serializ
             break;
         default:
             throw new Error();
-        }
-    }
-
-    @Override
-    public void log(InternalLogLevel level, Throwable cause) {
-        switch (level) {
-            case TRACE:
-                trace(cause);
-                break;
-            case DEBUG:
-                debug(cause);
-                break;
-            case INFO:
-                info(cause);
-                break;
-            case WARN:
-                warn(cause);
-                break;
-            case ERROR:
-                error(cause);
-                break;
-            default:
-                throw new Error();
         }
     }
 

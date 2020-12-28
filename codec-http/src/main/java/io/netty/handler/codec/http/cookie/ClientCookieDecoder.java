@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,15 +15,15 @@
  */
 package io.netty.handler.codec.http.cookie;
 
-import io.netty.handler.codec.DateFormatter;
-import io.netty.handler.codec.http.cookie.CookieHeaderNames.SameSite;
-
-import java.util.Date;
-
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
+import io.netty.handler.codec.http.HttpHeaderDateFormat;
+
+import java.text.ParsePosition;
+import java.util.Date;
+
 /**
- * A <a href="https://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used client side.
+ * A <a href="http://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used client side.
  *
  * It will store the way the raw value was wrapped in {@link Cookie#setWrap(boolean)} so it can be
  * eventually sent back to the Origin server as is.
@@ -83,42 +83,45 @@ public final class ClientCookieDecoder extends CookieDecoder {
             }
 
             int nameBegin = i;
-            int nameEnd;
-            int valueBegin;
-            int valueEnd;
+            int nameEnd = i;
+            int valueBegin = -1;
+            int valueEnd = -1;
 
-            for (;;) {
-                char curChar = header.charAt(i);
-                if (curChar == ';') {
-                    // NAME; (no value till ';')
-                    nameEnd = i;
-                    valueBegin = valueEnd = -1;
-                    break;
+            if (i != headerLen) {
+                keyValLoop: for (;;) {
 
-                } else if (curChar == '=') {
-                    // NAME=VALUE
-                    nameEnd = i;
-                    i++;
-                    if (i == headerLen) {
-                        // NAME= (empty value, i.e. nothing after '=')
-                        valueBegin = valueEnd = 0;
-                        break;
+                    char curChar = header.charAt(i);
+                    if (curChar == ';') {
+                        // NAME; (no value till ';')
+                        nameEnd = i;
+                        valueBegin = valueEnd = -1;
+                        break keyValLoop;
+
+                    } else if (curChar == '=') {
+                        // NAME=VALUE
+                        nameEnd = i;
+                        i++;
+                        if (i == headerLen) {
+                            // NAME= (empty value, i.e. nothing after '=')
+                            valueBegin = valueEnd = 0;
+                            break keyValLoop;
+                        }
+
+                        valueBegin = i;
+                        // NAME=VALUE;
+                        int semiPos = header.indexOf(';', i);
+                        valueEnd = i = semiPos > 0 ? semiPos : headerLen;
+                        break keyValLoop;
+                    } else {
+                        i++;
                     }
 
-                    valueBegin = i;
-                    // NAME=VALUE;
-                    int semiPos = header.indexOf(';', i);
-                    valueEnd = i = semiPos > 0 ? semiPos : headerLen;
-                    break;
-                } else {
-                    i++;
-                }
-
-                if (i == headerLen) {
-                    // NAME (no value till the end of string)
-                    nameEnd = headerLen;
-                    valueBegin = valueEnd = -1;
-                    break;
+                    if (i == headerLen) {
+                        // NAME (no value till the end of string)
+                        nameEnd = headerLen;
+                        valueBegin = valueEnd = -1;
+                        break;
+                    }
                 }
             }
 
@@ -141,7 +144,7 @@ public final class ClientCookieDecoder extends CookieDecoder {
                 cookieBuilder.appendAttribute(nameBegin, nameEnd, valueBegin, valueEnd);
             }
         }
-        return cookieBuilder != null ? cookieBuilder.cookie() : null;
+        return cookieBuilder.cookie();
     }
 
     private static class CookieBuilder {
@@ -155,9 +158,8 @@ public final class ClientCookieDecoder extends CookieDecoder {
         private int expiresEnd;
         private boolean secure;
         private boolean httpOnly;
-        private SameSite sameSite;
 
-        CookieBuilder(DefaultCookie cookie, String header) {
+        public CookieBuilder(DefaultCookie cookie, String header) {
             this.cookie = cookie;
             this.header = header;
         }
@@ -166,23 +168,25 @@ public final class ClientCookieDecoder extends CookieDecoder {
             // max age has precedence over expires
             if (maxAge != Long.MIN_VALUE) {
                 return maxAge;
-            } else if (isValueDefined(expiresStart, expiresEnd)) {
-                Date expiresDate = DateFormatter.parseHttpDate(header, expiresStart, expiresEnd);
-                if (expiresDate != null) {
-                    long maxAgeMillis = expiresDate.getTime() - System.currentTimeMillis();
-                    return maxAgeMillis / 1000 + (maxAgeMillis % 1000 != 0 ? 1 : 0);
+            } else {
+                String expires = computeValue(expiresStart, expiresEnd);
+                if (expires != null) {
+                    Date expiresDate = HttpHeaderDateFormat.get().parse(expires, new ParsePosition(0));
+                    if (expiresDate != null) {
+                        long maxAgeMillis = expiresDate.getTime() - System.currentTimeMillis();
+                        return maxAgeMillis / 1000 + (maxAgeMillis % 1000 != 0 ? 1 : 0);
+                    }
                 }
             }
             return Long.MIN_VALUE;
         }
 
-        Cookie cookie() {
+        public Cookie cookie() {
             cookie.setDomain(domain);
             cookie.setPath(path);
             cookie.setMaxAge(mergeMaxAgeAndExpires());
             cookie.setSecure(secure);
             cookie.setHttpOnly(httpOnly);
-            cookie.setSameSite(sameSite);
             return cookie;
         }
 
@@ -199,7 +203,7 @@ public final class ClientCookieDecoder extends CookieDecoder {
          * @param valueEnd
          *            where the value ends in the header
          */
-        void appendAttribute(int keyStart, int keyEnd, int valueStart, int valueEnd) {
+        public void appendAttribute(int keyStart, int keyEnd, int valueStart, int valueEnd) {
             int length = keyEnd - keyStart;
 
             if (length == 4) {
@@ -229,7 +233,7 @@ public final class ClientCookieDecoder extends CookieDecoder {
 
         private void setMaxAge(String value) {
             try {
-                maxAge = Math.max(Long.parseLong(value), 0L);
+                maxAge = Math.max(Long.valueOf(value), 0L);
             } catch (NumberFormatException e1) {
                 // ignore failure to parse -> treat as session cookie
             }
@@ -247,17 +251,11 @@ public final class ClientCookieDecoder extends CookieDecoder {
         private void parse8(int nameStart, int valueStart, int valueEnd) {
             if (header.regionMatches(true, nameStart, CookieHeaderNames.HTTPONLY, 0, 8)) {
                 httpOnly = true;
-            } else if (header.regionMatches(true, nameStart, CookieHeaderNames.SAMESITE, 0, 8)) {
-                sameSite = SameSite.of(computeValue(valueStart, valueEnd));
             }
         }
 
-        private static boolean isValueDefined(int valueStart, int valueEnd) {
-            return valueStart != -1 && valueStart != valueEnd;
-        }
-
         private String computeValue(int valueStart, int valueEnd) {
-            return isValueDefined(valueStart, valueEnd) ? header.substring(valueStart, valueEnd) : null;
+            return valueStart == -1 || valueStart == valueEnd ? null : header.substring(valueStart, valueEnd);
         }
     }
 }

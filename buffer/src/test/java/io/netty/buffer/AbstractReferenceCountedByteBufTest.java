@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,7 +29,6 @@ import java.nio.channels.ScatteringByteChannel;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 public class AbstractReferenceCountedByteBufTest {
 
@@ -54,18 +53,6 @@ public class AbstractReferenceCountedByteBufTest {
         referenceCounted.setRefCnt(0);
         assertEquals(0, referenceCounted.refCnt());
         referenceCounted.release(Integer.MAX_VALUE);
-    }
-
-    @Test
-    public void testReleaseErrorMessage() {
-        AbstractReferenceCountedByteBuf referenceCounted = newReferenceCounted();
-        assertTrue(referenceCounted.release());
-        try {
-            referenceCounted.release(1);
-            fail("IllegalReferenceCountException didn't occur");
-        } catch (IllegalReferenceCountException e) {
-            assertEquals("refCnt: 0, decrement: 1", e.getMessage());
-        }
     }
 
     @Test(expected = IllegalReferenceCountException.class)
@@ -98,17 +85,7 @@ public class AbstractReferenceCountedByteBufTest {
             }
 
             @Override
-            protected short _getShortLE(int index) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
             protected int _getUnsignedMedium(int index) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            protected int _getUnsignedMediumLE(int index) {
                 throw new UnsupportedOperationException();
             }
 
@@ -118,17 +95,7 @@ public class AbstractReferenceCountedByteBufTest {
             }
 
             @Override
-            protected int _getIntLE(int index) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
             protected long _getLong(int index) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            protected long _getLongLE(int index) {
                 throw new UnsupportedOperationException();
             }
 
@@ -143,17 +110,7 @@ public class AbstractReferenceCountedByteBufTest {
             }
 
             @Override
-            protected void _setShortLE(int index, int value) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
             protected void _setMedium(int index, int value) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            protected void _setMediumLE(int index, int value) {
                 throw new UnsupportedOperationException();
             }
 
@@ -163,17 +120,7 @@ public class AbstractReferenceCountedByteBufTest {
             }
 
             @Override
-            protected void _setIntLE(int index, int value) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
             protected void _setLong(int index, long value) {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            protected void _setLongLE(int index, long value) {
                 throw new UnsupportedOperationException();
             }
 
@@ -233,11 +180,6 @@ public class AbstractReferenceCountedByteBufTest {
             }
 
             @Override
-            public int getBytes(int index, FileChannel out, long position, int length) throws IOException {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
             public ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length) {
                 throw new UnsupportedOperationException();
             }
@@ -259,11 +201,6 @@ public class AbstractReferenceCountedByteBufTest {
 
             @Override
             public int setBytes(int index, ScatteringByteChannel in, int length) throws IOException {
-                throw new UnsupportedOperationException();
-            }
-
-            @Override
-            public int setBytes(int index, FileChannel in, long position, int length) throws IOException {
                 throw new UnsupportedOperationException();
             }
 
@@ -320,11 +257,6 @@ public class AbstractReferenceCountedByteBufTest {
             @Override
             protected void deallocate() {
                 // NOOP
-            }
-
-            @Override
-            public AbstractReferenceCountedByteBuf touch(Object hint) {
-                throw new UnsupportedOperationException();
             }
         };
     }

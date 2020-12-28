@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,13 +15,9 @@
  */
 package io.netty.buffer;
 
-import io.netty.util.AsciiString;
-import io.netty.util.ByteProcessor;
-import io.netty.util.CharsetUtil;
 import io.netty.util.IllegalReferenceCountException;
 import io.netty.util.ResourceLeakDetector;
 import io.netty.util.ResourceLeakDetectorFactory;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.SystemPropertyUtil;
@@ -33,35 +29,24 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
 
 import static io.netty.util.internal.MathUtil.isOutOfBounds;
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 /**
  * A skeletal implementation of a buffer.
  */
 public abstract class AbstractByteBuf extends ByteBuf {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractByteBuf.class);
-    private static final String LEGACY_PROP_CHECK_ACCESSIBLE = "io.netty.buffer.bytebuf.checkAccessible";
-    private static final String PROP_CHECK_ACCESSIBLE = "io.netty.buffer.checkAccessible";
-    static final boolean checkAccessible; // accessed from CompositeByteBuf
-    private static final String PROP_CHECK_BOUNDS = "io.netty.buffer.checkBounds";
-    private static final boolean checkBounds;
+    private static final String PROP_MODE = "io.netty.buffer.bytebuf.checkAccessible";
+    private static final boolean checkAccessible;
 
     static {
-        if (SystemPropertyUtil.contains(PROP_CHECK_ACCESSIBLE)) {
-            checkAccessible = SystemPropertyUtil.getBoolean(PROP_CHECK_ACCESSIBLE, true);
-        } else {
-            checkAccessible = SystemPropertyUtil.getBoolean(LEGACY_PROP_CHECK_ACCESSIBLE, true);
-        }
-        checkBounds = SystemPropertyUtil.getBoolean(PROP_CHECK_BOUNDS, true);
+        checkAccessible = SystemPropertyUtil.getBoolean(PROP_MODE, true);
         if (logger.isDebugEnabled()) {
-            logger.debug("-D{}: {}", PROP_CHECK_ACCESSIBLE, checkAccessible);
-            logger.debug("-D{}: {}", PROP_CHECK_BOUNDS, checkBounds);
+            logger.debug("-D{}: {}", PROP_MODE, checkAccessible);
         }
     }
 
@@ -72,25 +57,16 @@ public abstract class AbstractByteBuf extends ByteBuf {
     int writerIndex;
     private int markedReaderIndex;
     private int markedWriterIndex;
+
     private int maxCapacity;
 
+    private SwappedByteBuf swappedBuf;
+
     protected AbstractByteBuf(int maxCapacity) {
-        checkPositiveOrZero(maxCapacity, "maxCapacity");
-        this.maxCapacity = maxCapacity;
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return false;
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public ByteBuf asReadOnly() {
-        if (isReadOnly()) {
-            return this;
+        if (maxCapacity < 0) {
+            throw new IllegalArgumentException("maxCapacity: " + maxCapacity + " (expected: >= 0)");
         }
-        return Unpooled.unmodifiableBuffer(this);
+        this.maxCapacity = maxCapacity;
     }
 
     @Override
@@ -107,18 +83,11 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return readerIndex;
     }
 
-    private static void checkIndexBounds(final int readerIndex, final int writerIndex, final int capacity) {
-        if (readerIndex < 0 || readerIndex > writerIndex || writerIndex > capacity) {
-            throw new IndexOutOfBoundsException(String.format(
-                    "readerIndex: %d, writerIndex: %d (expected: 0 <= readerIndex <= writerIndex <= capacity(%d))",
-                    readerIndex, writerIndex, capacity));
-        }
-    }
-
     @Override
     public ByteBuf readerIndex(int readerIndex) {
-        if (checkBounds) {
-            checkIndexBounds(readerIndex, writerIndex, capacity());
+        if (readerIndex < 0 || readerIndex > writerIndex) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "readerIndex: %d (expected: 0 <= readerIndex <= writerIndex(%d))", readerIndex, writerIndex));
         }
         this.readerIndex = readerIndex;
         return this;
@@ -131,8 +100,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writerIndex(int writerIndex) {
-        if (checkBounds) {
-            checkIndexBounds(readerIndex, writerIndex, capacity());
+        if (writerIndex < readerIndex || writerIndex > capacity()) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "writerIndex: %d (expected: readerIndex(%d) <= writerIndex <= capacity(%d))",
+                    writerIndex, readerIndex, capacity()));
         }
         this.writerIndex = writerIndex;
         return this;
@@ -140,8 +111,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf setIndex(int readerIndex, int writerIndex) {
-        if (checkBounds) {
-            checkIndexBounds(readerIndex, writerIndex, capacity());
+        if (readerIndex < 0 || readerIndex > writerIndex || writerIndex > capacity()) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "readerIndex: %d, writerIndex: %d (expected: 0 <= readerIndex <= writerIndex <= capacity(%d))",
+                    readerIndex, writerIndex, capacity()));
         }
         setIndex0(readerIndex, writerIndex);
         return this;
@@ -208,14 +181,14 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf resetWriterIndex() {
-        writerIndex(markedWriterIndex);
+        writerIndex = markedWriterIndex;
         return this;
     }
 
     @Override
     public ByteBuf discardReadBytes() {
+        ensureAccessible();
         if (readerIndex == 0) {
-            ensureAccessible();
             return this;
         }
 
@@ -225,7 +198,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
             adjustMarkers(readerIndex);
             readerIndex = 0;
         } else {
-            ensureAccessible();
             adjustMarkers(readerIndex);
             writerIndex = readerIndex = 0;
         }
@@ -234,23 +206,23 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf discardSomeReadBytes() {
-        if (readerIndex > 0) {
-            if (readerIndex == writerIndex) {
-                ensureAccessible();
-                adjustMarkers(readerIndex);
-                writerIndex = readerIndex = 0;
-                return this;
-            }
-
-            if (readerIndex >= capacity() >>> 1) {
-                setBytes(0, this, readerIndex, writerIndex - readerIndex);
-                writerIndex -= readerIndex;
-                adjustMarkers(readerIndex);
-                readerIndex = 0;
-                return this;
-            }
-        }
         ensureAccessible();
+        if (readerIndex == 0) {
+            return this;
+        }
+
+        if (readerIndex == writerIndex) {
+            adjustMarkers(readerIndex);
+            writerIndex = readerIndex = 0;
+            return this;
+        }
+
+        if (readerIndex >= capacity() >>> 1) {
+            setBytes(0, this, readerIndex, writerIndex - readerIndex);
+            writerIndex -= readerIndex;
+            adjustMarkers(readerIndex);
+            readerIndex = 0;
+        }
         return this;
     }
 
@@ -270,38 +242,30 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
-    // Called after a capacity reduction
-    protected final void trimIndicesToCapacity(int newCapacity) {
-        if (writerIndex() > newCapacity) {
-            setIndex0(Math.min(readerIndex(), newCapacity), newCapacity);
-        }
-    }
-
     @Override
     public ByteBuf ensureWritable(int minWritableBytes) {
-        ensureWritable0(checkPositiveOrZero(minWritableBytes, "minWritableBytes"));
+        if (minWritableBytes < 0) {
+            throw new IllegalArgumentException(String.format(
+                    "minWritableBytes: %d (expected: >= 0)", minWritableBytes));
+        }
+        ensureWritable0(minWritableBytes);
         return this;
     }
 
     final void ensureWritable0(int minWritableBytes) {
-        final int writerIndex = writerIndex();
-        final int targetCapacity = writerIndex + minWritableBytes;
-        // using non-short-circuit & to reduce branching - this is a hot path and targetCapacity should rarely overflow
-        if (targetCapacity >= 0 & targetCapacity <= capacity()) {
-            ensureAccessible();
+        ensureAccessible();
+        if (minWritableBytes <= writableBytes()) {
             return;
         }
-        if (checkBounds && (targetCapacity < 0 || targetCapacity > maxCapacity)) {
-            ensureAccessible();
+
+        if (minWritableBytes > maxCapacity - writerIndex) {
             throw new IndexOutOfBoundsException(String.format(
                     "writerIndex(%d) + minWritableBytes(%d) exceeds maxCapacity(%d): %s",
                     writerIndex, minWritableBytes, maxCapacity, this));
         }
 
-        // Normalize the target capacity to the power of 2.
-        final int fastWritable = maxFastWritableBytes();
-        int newCapacity = fastWritable >= minWritableBytes ? writerIndex + fastWritable
-                : alloc().calculateNewCapacity(targetCapacity, maxCapacity);
+        // Normalize the current capacity to the power of 2.
+        int newCapacity = calculateNewCapacity(writerIndex + minWritableBytes);
 
         // Adjust to the new capacity.
         capacity(newCapacity);
@@ -310,7 +274,10 @@ public abstract class AbstractByteBuf extends ByteBuf {
     @Override
     public int ensureWritable(int minWritableBytes, boolean force) {
         ensureAccessible();
-        checkPositiveOrZero(minWritableBytes, "minWritableBytes");
+        if (minWritableBytes < 0) {
+            throw new IllegalArgumentException(String.format(
+                    "minWritableBytes: %d (expected: >= 0)", minWritableBytes));
+        }
 
         if (minWritableBytes <= writableBytes()) {
             return 0;
@@ -327,22 +294,56 @@ public abstract class AbstractByteBuf extends ByteBuf {
             return 3;
         }
 
-        int fastWritable = maxFastWritableBytes();
-        int newCapacity = fastWritable >= minWritableBytes ? writerIndex + fastWritable
-                : alloc().calculateNewCapacity(writerIndex + minWritableBytes, maxCapacity);
+        // Normalize the current capacity to the power of 2.
+        int newCapacity = calculateNewCapacity(writerIndex + minWritableBytes);
 
         // Adjust to the new capacity.
         capacity(newCapacity);
         return 2;
     }
 
+    private int calculateNewCapacity(int minNewCapacity) {
+        final int maxCapacity = this.maxCapacity;
+        final int threshold = 1048576 * 4; // 4 MiB page
+
+        if (minNewCapacity == threshold) {
+            return threshold;
+        }
+
+        // If over threshold, do not double but just increase by threshold.
+        if (minNewCapacity > threshold) {
+            int newCapacity = minNewCapacity / threshold * threshold;
+            if (newCapacity > maxCapacity - threshold) {
+                newCapacity = maxCapacity;
+            } else {
+                newCapacity += threshold;
+            }
+            return newCapacity;
+        }
+
+        // Not over threshold. Double up to 4 MiB, starting from 64.
+        int newCapacity = 64;
+        while (newCapacity < minNewCapacity) {
+            newCapacity <<= 1;
+        }
+
+        return Math.min(newCapacity, maxCapacity);
+    }
+
     @Override
     public ByteBuf order(ByteOrder endianness) {
+        if (endianness == null) {
+            throw new NullPointerException("endianness");
+        }
         if (endianness == order()) {
             return this;
         }
-        ObjectUtil.checkNotNull(endianness, "endianness");
-        return newSwappedByteBuf();
+
+        SwappedByteBuf swappedBuf = this.swappedBuf;
+        if (swappedBuf == null) {
+            this.swappedBuf = swappedBuf = newSwappedByteBuf();
+        }
+        return swappedBuf;
     }
 
     /**
@@ -379,21 +380,8 @@ public abstract class AbstractByteBuf extends ByteBuf {
     protected abstract short _getShort(int index);
 
     @Override
-    public short getShortLE(int index) {
-        checkIndex(index, 2);
-        return _getShortLE(index);
-    }
-
-    protected abstract short _getShortLE(int index);
-
-    @Override
     public int getUnsignedShort(int index) {
         return getShort(index) & 0xFFFF;
-    }
-
-    @Override
-    public int getUnsignedShortLE(int index) {
-        return getShortLE(index) & 0xFFFF;
     }
 
     @Override
@@ -405,25 +393,8 @@ public abstract class AbstractByteBuf extends ByteBuf {
     protected abstract int _getUnsignedMedium(int index);
 
     @Override
-    public int getUnsignedMediumLE(int index) {
-        checkIndex(index, 3);
-        return _getUnsignedMediumLE(index);
-    }
-
-    protected abstract int _getUnsignedMediumLE(int index);
-
-    @Override
     public int getMedium(int index) {
         int value = getUnsignedMedium(index);
-        if ((value & 0x800000) != 0) {
-            value |= 0xff000000;
-        }
-        return value;
-    }
-
-    @Override
-    public int getMediumLE(int index) {
-        int value = getUnsignedMediumLE(index);
         if ((value & 0x800000) != 0) {
             value |= 0xff000000;
         }
@@ -439,21 +410,8 @@ public abstract class AbstractByteBuf extends ByteBuf {
     protected abstract int _getInt(int index);
 
     @Override
-    public int getIntLE(int index) {
-        checkIndex(index, 4);
-        return _getIntLE(index);
-    }
-
-    protected abstract int _getIntLE(int index);
-
-    @Override
     public long getUnsignedInt(int index) {
         return getInt(index) & 0xFFFFFFFFL;
-    }
-
-    @Override
-    public long getUnsignedIntLE(int index) {
-        return getIntLE(index) & 0xFFFFFFFFL;
     }
 
     @Override
@@ -463,14 +421,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     protected abstract long _getLong(int index);
-
-    @Override
-    public long getLongLE(int index) {
-        checkIndex(index, 8);
-        return _getLongLE(index);
-    }
-
-    protected abstract long _getLongLE(int index);
 
     @Override
     public char getChar(int index) {
@@ -507,22 +457,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public CharSequence getCharSequence(int index, int length, Charset charset) {
-        if (CharsetUtil.US_ASCII.equals(charset) || CharsetUtil.ISO_8859_1.equals(charset)) {
-            // ByteBufUtil.getBytes(...) will return a new copy which the AsciiString uses directly
-            return new AsciiString(ByteBufUtil.getBytes(this, index, length, true), false);
-        }
-        return toString(index, length, charset);
-    }
-
-    @Override
-    public CharSequence readCharSequence(int length, Charset charset) {
-        CharSequence sequence = getCharSequence(readerIndex, length, charset);
-        readerIndex += length;
-        return sequence;
-    }
-
-    @Override
     public ByteBuf setByte(int index, int value) {
         checkIndex(index);
         _setByte(index, value);
@@ -547,15 +481,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     protected abstract void _setShort(int index, int value);
 
     @Override
-    public ByteBuf setShortLE(int index, int value) {
-        checkIndex(index, 2);
-        _setShortLE(index, value);
-        return this;
-    }
-
-    protected abstract void _setShortLE(int index, int value);
-
-    @Override
     public ByteBuf setChar(int index, int value) {
         setShort(index, value);
         return this;
@@ -571,15 +496,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     protected abstract void _setMedium(int index, int value);
 
     @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        checkIndex(index, 3);
-        _setMediumLE(index, value);
-        return this;
-    }
-
-    protected abstract void _setMediumLE(int index, int value);
-
-    @Override
     public ByteBuf setInt(int index, int value) {
         checkIndex(index, 4);
         _setInt(index, value);
@@ -587,15 +503,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     protected abstract void _setInt(int index, int value);
-
-    @Override
-    public ByteBuf setIntLE(int index, int value) {
-        checkIndex(index, 4);
-        _setIntLE(index, value);
-        return this;
-    }
-
-    protected abstract void _setIntLE(int index, int value);
 
     @Override
     public ByteBuf setFloat(int index, float value) {
@@ -611,15 +518,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     protected abstract void _setLong(int index, long value);
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        checkIndex(index, 8);
-        _setLongLE(index, value);
-        return this;
-    }
-
-    protected abstract void _setLongLE(int index, long value);
 
     @Override
     public ByteBuf setDouble(int index, double value) {
@@ -639,19 +537,15 @@ public abstract class AbstractByteBuf extends ByteBuf {
         return this;
     }
 
-    private static void checkReadableBounds(final ByteBuf src, final int length) {
-        if (length > src.readableBytes()) {
-            throw new IndexOutOfBoundsException(String.format(
-                    "length(%d) exceeds src.readableBytes(%d) where src is: %s", length, src.readableBytes(), src));
-        }
-    }
-
     @Override
     public ByteBuf setBytes(int index, ByteBuf src, int length) {
         checkIndex(index, length);
-        ObjectUtil.checkNotNull(src, "src");
-        if (checkBounds) {
-            checkReadableBounds(src, length);
+        if (src == null) {
+            throw new NullPointerException("src");
+        }
+        if (length > src.readableBytes()) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "length(%d) exceeds src.readableBytes(%d) where src is: %s", length, src.readableBytes(), src));
         }
 
         setBytes(index, src, src.readerIndex(), length);
@@ -693,41 +587,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
-        return setCharSequence0(index, sequence, charset, false);
-    }
-
-    private int setCharSequence0(int index, CharSequence sequence, Charset charset, boolean expand) {
-        if (charset.equals(CharsetUtil.UTF_8)) {
-            int length = ByteBufUtil.utf8MaxBytes(sequence);
-            if (expand) {
-                ensureWritable0(length);
-                checkIndex0(index, length);
-            } else {
-                checkIndex(index, length);
-            }
-            return ByteBufUtil.writeUtf8(this, index, length, sequence, sequence.length());
-        }
-        if (charset.equals(CharsetUtil.US_ASCII) || charset.equals(CharsetUtil.ISO_8859_1)) {
-            int length = sequence.length();
-            if (expand) {
-                ensureWritable0(length);
-                checkIndex0(index, length);
-            } else {
-                checkIndex(index, length);
-            }
-            return ByteBufUtil.writeAscii(this, index, sequence, length);
-        }
-        byte[] bytes = sequence.toString().getBytes(charset);
-        if (expand) {
-            ensureWritable0(bytes.length);
-            // setBytes(...) will take care of checking the indices.
-        }
-        setBytes(index, bytes);
-        return bytes.length;
-    }
-
-    @Override
     public byte readByte() {
         checkReadableBytes0(1);
         int i = readerIndex;
@@ -755,35 +614,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public short readShortLE() {
-        checkReadableBytes0(2);
-        short v = _getShortLE(readerIndex);
-        readerIndex += 2;
-        return v;
-    }
-
-    @Override
     public int readUnsignedShort() {
         return readShort() & 0xFFFF;
     }
 
     @Override
-    public int readUnsignedShortLE() {
-        return readShortLE() & 0xFFFF;
-    }
-
-    @Override
     public int readMedium() {
         int value = readUnsignedMedium();
-        if ((value & 0x800000) != 0) {
-            value |= 0xff000000;
-        }
-        return value;
-    }
-
-    @Override
-    public int readMediumLE() {
-        int value = readUnsignedMediumLE();
         if ((value & 0x800000) != 0) {
             value |= 0xff000000;
         }
@@ -799,25 +636,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readUnsignedMediumLE() {
-        checkReadableBytes0(3);
-        int v = _getUnsignedMediumLE(readerIndex);
-        readerIndex += 3;
-        return v;
-    }
-
-    @Override
     public int readInt() {
         checkReadableBytes0(4);
         int v = _getInt(readerIndex);
-        readerIndex += 4;
-        return v;
-    }
-
-    @Override
-    public int readIntLE() {
-        checkReadableBytes0(4);
-        int v = _getIntLE(readerIndex);
         readerIndex += 4;
         return v;
     }
@@ -828,22 +649,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public long readUnsignedIntLE() {
-        return readIntLE() & 0xFFFFFFFFL;
-    }
-
-    @Override
     public long readLong() {
         checkReadableBytes0(8);
         long v = _getLong(readerIndex);
-        readerIndex += 8;
-        return v;
-    }
-
-    @Override
-    public long readLongLE() {
-        checkReadableBytes0(8);
-        long v = _getLongLE(readerIndex);
         readerIndex += 8;
         return v;
     }
@@ -885,14 +693,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf readRetainedSlice(int length) {
-        checkReadableBytes(length);
-        ByteBuf slice = retainedSlice(readerIndex, length);
-        readerIndex += length;
-        return slice;
-    }
-
-    @Override
     public ByteBuf readBytes(byte[] dst, int dstIndex, int length) {
         checkReadableBytes(length);
         getBytes(readerIndex, dst, dstIndex, length);
@@ -914,11 +714,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf readBytes(ByteBuf dst, int length) {
-        if (checkBounds) {
-            if (length > dst.writableBytes()) {
-                throw new IndexOutOfBoundsException(String.format(
-                        "length(%d) exceeds dst.writableBytes(%d) where dst is: %s", length, dst.writableBytes(), dst));
-            }
+        if (length > dst.writableBytes()) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "length(%d) exceeds dst.writableBytes(%d) where dst is: %s", length, dst.writableBytes(), dst));
         }
         readBytes(dst, dst.writerIndex(), length);
         dst.writerIndex(dst.writerIndex() + length);
@@ -947,15 +745,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
             throws IOException {
         checkReadableBytes(length);
         int readBytes = getBytes(readerIndex, out, length);
-        readerIndex += readBytes;
-        return readBytes;
-    }
-
-    @Override
-    public int readBytes(FileChannel out, long position, int length)
-            throws IOException {
-        checkReadableBytes(length);
-        int readBytes = getBytes(readerIndex, out, position, length);
         readerIndex += readBytes;
         return readBytes;
     }
@@ -997,25 +786,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf writeShortLE(int value) {
-        ensureWritable0(2);
-        _setShortLE(writerIndex, value);
-        writerIndex += 2;
-        return this;
-    }
-
-    @Override
     public ByteBuf writeMedium(int value) {
         ensureWritable0(3);
         _setMedium(writerIndex, value);
-        writerIndex += 3;
-        return this;
-    }
-
-    @Override
-    public ByteBuf writeMediumLE(int value) {
-        ensureWritable0(3);
-        _setMediumLE(writerIndex, value);
         writerIndex += 3;
         return this;
     }
@@ -1029,25 +802,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf writeIntLE(int value) {
-        ensureWritable0(4);
-        _setIntLE(writerIndex, value);
-        writerIndex += 4;
-        return this;
-    }
-
-    @Override
     public ByteBuf writeLong(long value) {
         ensureWritable0(8);
         _setLong(writerIndex, value);
-        writerIndex += 8;
-        return this;
-    }
-
-    @Override
-    public ByteBuf writeLongLE(long value) {
-        ensureWritable0(8);
-        _setLongLE(writerIndex, value);
         writerIndex += 8;
         return this;
     }
@@ -1092,8 +849,9 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writeBytes(ByteBuf src, int length) {
-        if (checkBounds) {
-            checkReadableBounds(src, length);
+        if (length > src.readableBytes()) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "length(%d) exceeds src.readableBytes(%d) where src is: %s", length, src.readableBytes(), src));
         }
         writeBytes(src, src.readerIndex(), length);
         src.readerIndex(src.readerIndex() + length);
@@ -1139,16 +897,6 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int writeBytes(FileChannel in, long position, int length) throws IOException {
-        ensureWritable(length);
-        int writtenBytes = setBytes(writerIndex, in, position, length);
-        if (writtenBytes > 0) {
-            writerIndex += writtenBytes;
-        }
-        return writtenBytes;
-    }
-
-    @Override
     public ByteBuf writeZero(int length) {
         if (length == 0) {
             return this;
@@ -1185,26 +933,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int writeCharSequence(CharSequence sequence, Charset charset) {
-        int written = setCharSequence0(writerIndex, sequence, charset, true);
-        writerIndex += written;
-        return written;
-    }
-
-    @Override
     public ByteBuf copy() {
         return copy(readerIndex, readableBytes());
     }
 
     @Override
     public ByteBuf duplicate() {
-        ensureAccessible();
-        return new UnpooledDuplicatedByteBuf(this);
-    }
-
-    @Override
-    public ByteBuf retainedDuplicate() {
-        return duplicate().retain();
+        return new DuplicatedAbstractByteBuf(this);
     }
 
     @Override
@@ -1213,19 +948,8 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf retainedSlice() {
-        return slice().retain();
-    }
-
-    @Override
     public ByteBuf slice(int index, int length) {
-        ensureAccessible();
-        return new UnpooledSlicedByteBuf(this, index, length);
-    }
-
-    @Override
-    public ByteBuf retainedSlice(int index, int length) {
-        return slice(index, length).retain();
+        return new SlicedAbstractByteBuf(this, index, length);
     }
 
     @Override
@@ -1250,44 +974,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public int indexOf(int fromIndex, int toIndex, byte value) {
-        if (fromIndex <= toIndex) {
-            return firstIndexOf(fromIndex, toIndex, value);
-        } else {
-            return lastIndexOf(fromIndex, toIndex, value);
-        }
-    }
-
-    private int firstIndexOf(int fromIndex, int toIndex, byte value) {
-        fromIndex = Math.max(fromIndex, 0);
-        if (fromIndex >= toIndex || capacity() == 0) {
-            return -1;
-        }
-        checkIndex(fromIndex, toIndex - fromIndex);
-
-        for (int i = fromIndex; i < toIndex; i ++) {
-            if (_getByte(i) == value) {
-                return i;
-            }
-        }
-
-        return -1;
-    }
-
-    private int lastIndexOf(int fromIndex, int toIndex, byte value) {
-        fromIndex = Math.min(fromIndex, capacity());
-        if (fromIndex < 0 || capacity() == 0) {
-            return -1;
-        }
-
-        checkIndex(toIndex, fromIndex - toIndex);
-
-        for (int i = fromIndex - 1; i >= toIndex; i --) {
-            if (_getByte(i) == value) {
-                return i;
-            }
-        }
-
-        return -1;
+        return ByteBufUtil.indexOf(this, fromIndex, toIndex, value);
     }
 
     @Override
@@ -1311,7 +998,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByte(ByteProcessor processor) {
+    public int forEachByte(ByteBufProcessor processor) {
         ensureAccessible();
         try {
             return forEachByteAsc0(readerIndex, writerIndex, processor);
@@ -1322,7 +1009,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         checkIndex(index, length);
         try {
             return forEachByteAsc0(index, index + length, processor);
@@ -1332,7 +1019,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
-    int forEachByteAsc0(int start, int end, ByteProcessor processor) throws Exception {
+    private int forEachByteAsc0(int start, int end, ByteBufProcessor processor) throws Exception {
         for (; start < end; ++start) {
             if (!processor.process(_getByte(start))) {
                 return start;
@@ -1343,7 +1030,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByteDesc(ByteProcessor processor) {
+    public int forEachByteDesc(ByteBufProcessor processor) {
         ensureAccessible();
         try {
             return forEachByteDesc0(writerIndex - 1, readerIndex, processor);
@@ -1354,7 +1041,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         checkIndex(index, length);
         try {
             return forEachByteDesc0(index + length - 1, index, processor);
@@ -1364,7 +1051,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
         }
     }
 
-    int forEachByteDesc0(int rStart, final int rEnd, ByteProcessor processor) throws Exception {
+    private int forEachByteDesc0(int rStart, final int rEnd, ByteBufProcessor processor) throws Exception {
         for (; rStart >= rEnd; --rStart) {
             if (!processor.process(_getByte(rStart))) {
                 return rStart;
@@ -1380,7 +1067,13 @@ public abstract class AbstractByteBuf extends ByteBuf {
 
     @Override
     public boolean equals(Object o) {
-        return this == o || (o instanceof ByteBuf && ByteBufUtil.equals(this, (ByteBuf) o));
+        if (this == o) {
+            return true;
+        }
+        if (o instanceof ByteBuf) {
+            return ByteBufUtil.equals(this, (ByteBuf) o);
+        }
+        return false;
     }
 
     @Override
@@ -1420,38 +1113,26 @@ public abstract class AbstractByteBuf extends ByteBuf {
         checkIndex0(index, fieldLength);
     }
 
-    private static void checkRangeBounds(final String indexName, final int index,
-            final int fieldLength, final int capacity) {
-        if (isOutOfBounds(index, fieldLength, capacity)) {
-            throw new IndexOutOfBoundsException(String.format(
-                    "%s: %d, length: %d (expected: range(0, %d))", indexName, index, fieldLength, capacity));
-        }
-    }
-
     final void checkIndex0(int index, int fieldLength) {
-        if (checkBounds) {
-            checkRangeBounds("index", index, fieldLength, capacity());
+        if (isOutOfBounds(index, fieldLength, capacity())) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "index: %d, length: %d (expected: range(0, %d))", index, fieldLength, capacity()));
         }
     }
 
     protected final void checkSrcIndex(int index, int length, int srcIndex, int srcCapacity) {
         checkIndex(index, length);
-        if (checkBounds) {
-            checkRangeBounds("srcIndex", srcIndex, length, srcCapacity);
+        if (isOutOfBounds(srcIndex, length, srcCapacity)) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "srcIndex: %d, length: %d (expected: range(0, %d))", srcIndex, length, srcCapacity));
         }
     }
 
     protected final void checkDstIndex(int index, int length, int dstIndex, int dstCapacity) {
         checkIndex(index, length);
-        if (checkBounds) {
-            checkRangeBounds("dstIndex", dstIndex, length, dstCapacity);
-        }
-    }
-
-    protected final void checkDstIndex(int length, int dstIndex, int dstCapacity) {
-        checkReadableBytes(length);
-        if (checkBounds) {
-            checkRangeBounds("dstIndex", dstIndex, length, dstCapacity);
+        if (isOutOfBounds(dstIndex, length, dstCapacity)) {
+            throw new IndexOutOfBoundsException(String.format(
+                    "dstIndex: %d, length: %d (expected: range(0, %d))", dstIndex, length, dstCapacity));
         }
     }
 
@@ -1461,20 +1142,22 @@ public abstract class AbstractByteBuf extends ByteBuf {
      * than the specified value.
      */
     protected final void checkReadableBytes(int minimumReadableBytes) {
-        checkReadableBytes0(checkPositiveOrZero(minimumReadableBytes, "minimumReadableBytes"));
+        if (minimumReadableBytes < 0) {
+            throw new IllegalArgumentException("minimumReadableBytes: " + minimumReadableBytes + " (expected: >= 0)");
+        }
+        checkReadableBytes0(minimumReadableBytes);
     }
 
     protected final void checkNewCapacity(int newCapacity) {
         ensureAccessible();
-        if (checkBounds && (newCapacity < 0 || newCapacity > maxCapacity())) {
-            throw new IllegalArgumentException("newCapacity: " + newCapacity +
-                    " (expected: 0-" + maxCapacity() + ')');
+        if (newCapacity < 0 || newCapacity > maxCapacity()) {
+            throw new IllegalArgumentException("newCapacity: " + newCapacity + " (expected: 0-" + maxCapacity() + ')');
         }
     }
 
     private void checkReadableBytes0(int minimumReadableBytes) {
         ensureAccessible();
-        if (checkBounds && readerIndex > writerIndex - minimumReadableBytes) {
+        if (readerIndex > writerIndex - minimumReadableBytes) {
             throw new IndexOutOfBoundsException(String.format(
                     "readerIndex(%d) + length(%d) exceeds writerIndex(%d): %s",
                     readerIndex, minimumReadableBytes, writerIndex, this));
@@ -1486,7 +1169,7 @@ public abstract class AbstractByteBuf extends ByteBuf {
      * if the buffer was released before.
      */
     protected final void ensureAccessible() {
-        if (checkAccessible && !isAccessible()) {
+        if (checkAccessible && refCnt() == 0) {
             throw new IllegalReferenceCountException(0);
         }
     }

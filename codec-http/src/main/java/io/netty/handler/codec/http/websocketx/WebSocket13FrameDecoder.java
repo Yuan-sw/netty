@@ -1,11 +1,11 @@
 /*
- * Copyright 2019 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-// (BSD License: https://www.opensource.org/licenses/bsd-license)
+// (BSD License: http://www.opensource.org/licenses/bsd-license)
 //
 // Copyright (c) 2011, Joe Walnes and contributors
 // All rights reserved.
@@ -61,7 +61,7 @@ public class WebSocket13FrameDecoder extends WebSocket08FrameDecoder {
     /**
      * Constructor
      *
-     * @param expectMaskedFrames
+     * @param maskedPayload
      *            Web socket servers must set this to true processed incoming masked payload. Client implementations
      *            must set this to false.
      * @param allowExtensions
@@ -70,42 +70,7 @@ public class WebSocket13FrameDecoder extends WebSocket08FrameDecoder {
      *            Maximum length of a frame's payload. Setting this to an appropriate value for you application
      *            helps check for denial of services attacks.
      */
-    public WebSocket13FrameDecoder(boolean expectMaskedFrames, boolean allowExtensions, int maxFramePayloadLength) {
-        this(expectMaskedFrames, allowExtensions, maxFramePayloadLength, false);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param expectMaskedFrames
-     *            Web socket servers must set this to true processed incoming masked payload. Client implementations
-     *            must set this to false.
-     * @param allowExtensions
-     *            Flag to allow reserved extension bits to be used or not
-     * @param maxFramePayloadLength
-     *            Maximum length of a frame's payload. Setting this to an appropriate value for you application
-     *            helps check for denial of services attacks.
-     * @param allowMaskMismatch
-     *            When set to true, frames which are not masked properly according to the standard will still be
-     *            accepted.
-     */
-    public WebSocket13FrameDecoder(boolean expectMaskedFrames, boolean allowExtensions, int maxFramePayloadLength,
-                                   boolean allowMaskMismatch) {
-        this(WebSocketDecoderConfig.newBuilder()
-            .expectMaskedFrames(expectMaskedFrames)
-            .allowExtensions(allowExtensions)
-            .maxFramePayloadLength(maxFramePayloadLength)
-            .allowMaskMismatch(allowMaskMismatch)
-            .build());
-    }
-
-    /**
-     * Constructor
-     *
-     * @param decoderConfig
-     *            Frames decoder configuration.
-     */
-    public WebSocket13FrameDecoder(WebSocketDecoderConfig decoderConfig) {
-        super(decoderConfig);
+    public WebSocket13FrameDecoder(boolean maskedPayload, boolean allowExtensions, int maxFramePayloadLength) {
+        super(maskedPayload, allowExtensions, maxFramePayloadLength);
     }
 }

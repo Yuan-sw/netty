@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-// (BSD License: https://www.opensource.org/licenses/bsd-license)
+// (BSD License: http://www.opensource.org/licenses/bsd-license)
 //
 // Copyright (c) 2011, Joe Walnes and contributors
 // All rights reserved.
@@ -87,7 +87,7 @@ public class WebSocket08FrameEncoder extends MessageToMessageEncoder<WebSocketFr
      * sent at once.<br>
      * Masked messages will always be sent at once.
      */
-    private static final int GATHERING_WRITE_THRESHOLD = 1024;
+    private static final int GATHERING_WRITE_TRESHOLD = 1024;
 
     private final boolean maskPayload;
 
@@ -126,8 +126,8 @@ public class WebSocket08FrameEncoder extends MessageToMessageEncoder<WebSocketFr
 
         int length = data.readableBytes();
 
-        if (logger.isTraceEnabled()) {
-            logger.trace("Encoding WebSocket Frame opCode={} length={}", opcode, length);
+        if (logger.isDebugEnabled()) {
+            logger.debug("Encoding WebSocket Frame opCode=" + opcode + " length=" + length);
         }
 
         int b0 = 0;
@@ -148,7 +148,7 @@ public class WebSocket08FrameEncoder extends MessageToMessageEncoder<WebSocketFr
             int maskLength = maskPayload ? 4 : 0;
             if (length <= 125) {
                 int size = 2 + maskLength;
-                if (maskPayload || length <= GATHERING_WRITE_THRESHOLD) {
+                if (maskPayload || length <= GATHERING_WRITE_TRESHOLD) {
                     size += length;
                 }
                 buf = ctx.alloc().buffer(size);
@@ -157,7 +157,7 @@ public class WebSocket08FrameEncoder extends MessageToMessageEncoder<WebSocketFr
                 buf.writeByte(b);
             } else if (length <= 0xFFFF) {
                 int size = 4 + maskLength;
-                if (maskPayload || length <= GATHERING_WRITE_THRESHOLD) {
+                if (maskPayload || length <= GATHERING_WRITE_TRESHOLD) {
                     size += length;
                 }
                 buf = ctx.alloc().buffer(size);
@@ -167,7 +167,7 @@ public class WebSocket08FrameEncoder extends MessageToMessageEncoder<WebSocketFr
                 buf.writeByte(length & 0xFF);
             } else {
                 int size = 10 + maskLength;
-                if (maskPayload || length <= GATHERING_WRITE_THRESHOLD) {
+                if (maskPayload || length <= GATHERING_WRITE_TRESHOLD) {
                     size += length;
                 }
                 buf = ctx.alloc().buffer(size);

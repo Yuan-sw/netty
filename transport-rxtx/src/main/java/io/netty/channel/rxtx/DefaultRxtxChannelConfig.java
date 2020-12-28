@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,20 +19,11 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.MessageSizeEstimator;
-import io.netty.channel.PreferHeapByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 
 import java.util.Map;
 
-import static io.netty.channel.rxtx.RxtxChannelOption.BAUD_RATE;
-import static io.netty.channel.rxtx.RxtxChannelOption.DATA_BITS;
-import static io.netty.channel.rxtx.RxtxChannelOption.DTR;
-import static io.netty.channel.rxtx.RxtxChannelOption.PARITY_BIT;
-import static io.netty.channel.rxtx.RxtxChannelOption.READ_TIMEOUT;
-import static io.netty.channel.rxtx.RxtxChannelOption.RTS;
-import static io.netty.channel.rxtx.RxtxChannelOption.STOP_BITS;
-import static io.netty.channel.rxtx.RxtxChannelOption.WAIT_TIME;
+import static io.netty.channel.rxtx.RxtxChannelOption.*;
 
 /**
  * Default configuration class for RXTX device connections.
@@ -53,7 +44,6 @@ final class DefaultRxtxChannelConfig extends DefaultChannelConfig implements Rxt
 
     DefaultRxtxChannelConfig(RxtxChannel channel) {
         super(channel);
-        setAllocator(new PreferHeapByteBufAllocator(getAllocator()));
     }
 
     @Override
@@ -218,7 +208,6 @@ final class DefaultRxtxChannelConfig extends DefaultChannelConfig implements Rxt
     }
 
     @Override
-    @Deprecated
     public RxtxChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead) {
         super.setMaxMessagesPerRead(maxMessagesPerRead);
         return this;
@@ -263,12 +252,6 @@ final class DefaultRxtxChannelConfig extends DefaultChannelConfig implements Rxt
     @Override
     public RxtxChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
         super.setWriteBufferLowWaterMark(writeBufferLowWaterMark);
-        return this;
-    }
-
-    @Override
-    public RxtxChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark) {
-        super.setWriteBufferWaterMark(writeBufferWaterMark);
         return this;
     }
 

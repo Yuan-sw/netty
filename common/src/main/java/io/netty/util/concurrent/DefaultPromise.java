@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,6 +15,7 @@
  */
 package io.netty.util.concurrent;
 
+import io.netty.util.Signal;
 import io.netty.util.internal.InternalThreadLocalMap;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
@@ -24,9 +25,7 @@ import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.util.concurrent.CancellationException;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicReferenceFieldUpdater;
 
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
@@ -41,11 +40,10 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @SuppressWarnings("rawtypes")
     private static final AtomicReferenceFieldUpdater<DefaultPromise, Object> RESULT_UPDATER =
             AtomicReferenceFieldUpdater.newUpdater(DefaultPromise.class, Object.class, "result");
-    private static final Object SUCCESS = new Object();
-    private static final Object UNCANCELLABLE = new Object();
-    private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(
-            StacklessCancellationException.newInstance(DefaultPromise.class, "cancel(...)"));
-    private static final StackTraceElement[] CANCELLATION_STACK = CANCELLATION_CAUSE_HOLDER.cause.getStackTrace();
+    private static final Signal SUCCESS = Signal.valueOf(DefaultPromise.class.getName() + ".SUCCESS");
+    private static final Signal UNCANCELLABLE = Signal.valueOf(DefaultPromise.class.getName() + ".UNCANCELLABLE");
+    private static final CauseHolder CANCELLATION_CAUSE_HOLDER = new CauseHolder(ThrowableUtil.unknownStackTrace(
+            new CancellationException(), DefaultPromise.class, "cancel(...)"));
 
     private volatile Object result;
     private final EventExecutor executor;
@@ -94,6 +92,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public Promise<V> setSuccess(V result) {
         if (setSuccess0(result)) {
+            notifyListeners();
             return this;
         }
         throw new IllegalStateException("complete already: " + this);
@@ -101,12 +100,17 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public boolean trySuccess(V result) {
-        return setSuccess0(result);
+        if (setSuccess0(result)) {
+            notifyListeners();
+            return true;
+        }
+        return false;
     }
 
     @Override
     public Promise<V> setFailure(Throwable cause) {
         if (setFailure0(cause)) {
+            notifyListeners();
             return this;
         }
         throw new IllegalStateException("complete already: " + this, cause);
@@ -114,7 +118,11 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
 
     @Override
     public boolean tryFailure(Throwable cause) {
-        return setFailure0(cause);
+        if (setFailure0(cause)) {
+            notifyListeners();
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -137,39 +145,10 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         return result == null;
     }
 
-    private static final class LeanCancellationException extends CancellationException {
-        private static final long serialVersionUID = 2794674970981187807L;
-
-        // Suppress a warning since the method doesn't need synchronization
-        @Override
-        public Throwable fillInStackTrace() {   // lgtm[java/non-sync-override]
-            setStackTrace(CANCELLATION_STACK);
-            return this;
-        }
-
-        @Override
-        public String toString() {
-            return CancellationException.class.getName();
-        }
-    }
-
     @Override
     public Throwable cause() {
-        return cause0(result);
-    }
-
-    private Throwable cause0(Object result) {
-        if (!(result instanceof CauseHolder)) {
-            return null;
-        }
-        if (result == CANCELLATION_CAUSE_HOLDER) {
-            CancellationException ce = new LeanCancellationException();
-            if (RESULT_UPDATER.compareAndSet(this, CANCELLATION_CAUSE_HOLDER, new CauseHolder(ce))) {
-                return ce;
-            }
-            result = this.result;
-        }
-        return ((CauseHolder) result).cause;
+        Object result = this.result;
+        return (result instanceof CauseHolder) ? ((CauseHolder) result).cause : null;
     }
 
     @Override
@@ -323,54 +302,10 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public V getNow() {
         Object result = this.result;
-        if (result instanceof CauseHolder || result == SUCCESS || result == UNCANCELLABLE) {
+        if (result instanceof CauseHolder || result == SUCCESS) {
             return null;
         }
         return (V) result;
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public V get() throws InterruptedException, ExecutionException {
-        Object result = this.result;
-        if (!isDone0(result)) {
-            await();
-            result = this.result;
-        }
-        if (result == SUCCESS || result == UNCANCELLABLE) {
-            return null;
-        }
-        Throwable cause = cause0(result);
-        if (cause == null) {
-            return (V) result;
-        }
-        if (cause instanceof CancellationException) {
-            throw (CancellationException) cause;
-        }
-        throw new ExecutionException(cause);
-    }
-
-    @SuppressWarnings("unchecked")
-    @Override
-    public V get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
-        Object result = this.result;
-        if (!isDone0(result)) {
-            if (!await(timeout, unit)) {
-                throw new TimeoutException();
-            }
-            result = this.result;
-        }
-        if (result == SUCCESS || result == UNCANCELLABLE) {
-            return null;
-        }
-        Throwable cause = cause0(result);
-        if (cause == null) {
-            return (V) result;
-        }
-        if (cause instanceof CancellationException) {
-            throw (CancellationException) cause;
-        }
-        throw new ExecutionException(cause);
     }
 
     /**
@@ -381,9 +316,8 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     @Override
     public boolean cancel(boolean mayInterruptIfRunning) {
         if (RESULT_UPDATER.compareAndSet(this, null, CANCELLATION_CAUSE_HOLDER)) {
-            if (checkNotifyWaiters()) {
-                notifyListeners();
-            }
+            checkNotifyWaiters();
+            notifyListeners();
             return true;
         }
         return false;
@@ -474,10 +408,10 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
      */
     protected static void notifyListener(
             EventExecutor eventExecutor, final Future<?> future, final GenericFutureListener<?> listener) {
-        notifyListenerWithStackOverFlowProtection(
-                checkNotNull(eventExecutor, "eventExecutor"),
-                checkNotNull(future, "future"),
-                checkNotNull(listener, "listener"));
+        checkNotNull(eventExecutor, "eventExecutor");
+        checkNotNull(future, "future");
+        checkNotNull(listener, "listener");
+        notifyListenerWithStackOverFlowProtection(eventExecutor, future, listener);
     }
 
     private void notifyListeners() {
@@ -549,7 +483,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             if (listeners instanceof DefaultFutureListeners) {
                 notifyListeners0((DefaultFutureListeners) listeners);
             } else {
-                notifyListener0(this, (GenericFutureListener<?>) listeners);
+                notifyListener0(this, (GenericFutureListener<? extends Future<V>>) listeners);
             }
             synchronized (this) {
                 if (this.listeners == null) {
@@ -577,9 +511,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         try {
             l.operationComplete(future);
         } catch (Throwable t) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationComplete()", t);
-            }
+            logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationComplete()", t);
         }
     }
 
@@ -589,7 +521,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         } else if (listeners instanceof DefaultFutureListeners) {
             ((DefaultFutureListeners) listeners).add(listener);
         } else {
-            listeners = new DefaultFutureListeners((GenericFutureListener<?>) listeners, listener);
+            listeners = new DefaultFutureListeners((GenericFutureListener<? extends Future<V>>) listeners, listener);
         }
     }
 
@@ -612,23 +544,16 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
     private boolean setValue0(Object objResult) {
         if (RESULT_UPDATER.compareAndSet(this, null, objResult) ||
             RESULT_UPDATER.compareAndSet(this, UNCANCELLABLE, objResult)) {
-            if (checkNotifyWaiters()) {
-                notifyListeners();
-            }
+            checkNotifyWaiters();
             return true;
         }
         return false;
     }
 
-    /**
-     * Check if there are any waiters and if so notify these.
-     * @return {@code true} if there are any listeners attached to the promise, {@code false} otherwise.
-     */
-    private synchronized boolean checkNotifyWaiters() {
+    private synchronized void checkNotifyWaiters() {
         if (waiters > 0) {
             notifyAll();
         }
-        return listeners != null;
     }
 
     private void incWaiters() {
@@ -816,9 +741,7 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
         try {
             l.operationProgressed(future, progress, total);
         } catch (Throwable t) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationProgressed()", t);
-            }
+            logger.warn("An exception was thrown by " + l.getClass().getName() + ".operationProgressed()", t);
         }
     }
 
@@ -842,24 +765,6 @@ public class DefaultPromise<V> extends AbstractFuture<V> implements Promise<V> {
             executor.execute(task);
         } catch (Throwable t) {
             rejectedExecutionLogger.error("Failed to submit a listener notification task. Event loop shut down?", t);
-        }
-    }
-
-    private static final class StacklessCancellationException extends CancellationException {
-
-        private static final long serialVersionUID = -2974906711413716191L;
-
-        private StacklessCancellationException() { }
-
-        // Override fillInStackTrace() so we not populate the backtrace via a native call and so leak the
-        // Classloader.
-        @Override
-        public Throwable fillInStackTrace() {
-            return this;
-        }
-
-        static StacklessCancellationException newInstance(Class<?> clazz, String method) {
-            return ThrowableUtil.unknownStackTrace(new StacklessCancellationException(), clazz, method);
         }
     }
 }

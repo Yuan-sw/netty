@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,18 +15,20 @@
  */
 package io.netty.handler.ssl;
 
-import org.junit.Test;
+import static org.junit.Assert.fail;
+import static org.junit.Assert.assertNotNull;
+
+import java.io.InputStream;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
+import java.util.Arrays;
 
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
-import java.util.Arrays;
 
-import static io.netty.handler.ssl.Java8SslTestUtils.loadCertCollection;
-import static org.junit.Assert.fail;
-import static org.junit.Assert.assertNotNull;
+import org.junit.Test;
 
 public class SslContextTrustManagerTest {
     @Test
@@ -108,7 +110,7 @@ public class SslContextTrustManagerTest {
             throws Exception {
         X509Certificate[] certCollection = loadCertCollection(resourceNames);
         TrustManagerFactory tmf = SslContext.buildTrustManagerFactory(
-                certCollection, null, null);
+                certCollection, null);
 
         for (TrustManager tm : tmf.getTrustManagers()) {
             if (tm instanceof X509TrustManager) {
@@ -118,5 +120,28 @@ public class SslContextTrustManagerTest {
 
         throw new Exception(
                 "Unable to find any X509TrustManager from this factory.");
+    }
+
+    private static X509Certificate[] loadCertCollection(String[] resourceNames)
+            throws Exception {
+        CertificateFactory certFactory = CertificateFactory
+                .getInstance("X.509");
+
+        X509Certificate[] certCollection = new X509Certificate[resourceNames.length];
+        for (int i = 0; i < resourceNames.length; i++) {
+            String resourceName = resourceNames[i];
+            InputStream is = null;
+            try {
+                is = SslContextTest.class.getResourceAsStream(resourceName);
+                assertNotNull("Cannot find " + resourceName, is);
+                certCollection[i] = (X509Certificate) certFactory
+                        .generateCertificate(is);
+            } finally {
+                if (is != null) {
+                    is.close();
+                }
+            }
+        }
+        return certCollection;
     }
 }

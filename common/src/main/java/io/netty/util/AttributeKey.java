@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,52 +15,71 @@
  */
 package io.netty.util;
 
+import io.netty.util.internal.PlatformDependent;
+
+import java.util.concurrent.ConcurrentMap;
+
+import static io.netty.util.internal.ObjectUtil.checkNotNull;
+
 /**
  * Key which can be used to access {@link Attribute} out of the {@link AttributeMap}. Be aware that it is not be
  * possible to have multiple keys with the same name.
  *
+ *
  * @param <T>   the type of the {@link Attribute} which can be accessed via this {@link AttributeKey}.
  */
-@SuppressWarnings("UnusedDeclaration") // 'T' is used only at compile time
-public final class AttributeKey<T> extends AbstractConstant<AttributeKey<T>> {
+@SuppressWarnings({ "UnusedDeclaration", "deprecation" }) // 'T' is used only at compile time
+public final class AttributeKey<T> extends UniqueName {
 
-    private static final ConstantPool<AttributeKey<Object>> pool = new ConstantPool<AttributeKey<Object>>() {
-        @Override
-        protected AttributeKey<Object> newConstant(int id, String name) {
-            return new AttributeKey<Object>(id, name);
-        }
-    };
+    @SuppressWarnings("rawtypes")
+    private static final ConcurrentMap<String, AttributeKey> names = PlatformDependent.newConcurrentHashMap();
 
     /**
-     * Returns the singleton instance of the {@link AttributeKey} which has the specified {@code name}.
+     * Creates a new {@link AttributeKey} with the specified {@param name} or return the already existing
+     * {@link AttributeKey} for the given name.
      */
     @SuppressWarnings("unchecked")
     public static <T> AttributeKey<T> valueOf(String name) {
-        return (AttributeKey<T>) pool.valueOf(name);
+        checkNotNull(name, "name");
+        AttributeKey<T> option = names.get(name);
+        if (option == null) {
+            option = new AttributeKey<T>(name);
+            AttributeKey<T> old = names.putIfAbsent(name, option);
+            if (old != null) {
+                option = old;
+            }
+        }
+        return option;
     }
 
     /**
      * Returns {@code true} if a {@link AttributeKey} exists for the given {@code name}.
      */
     public static boolean exists(String name) {
-        return pool.exists(name);
+        checkNotNull(name, "name");
+        return names.containsKey(name);
     }
 
     /**
-     * Creates a new {@link AttributeKey} for the given {@code name} or fail with an
-     * {@link IllegalArgumentException} if a {@link AttributeKey} for the given {@code name} exists.
+     * Creates a new {@link AttributeKey} for the given {@param name} or fail with an
+     * {@link IllegalArgumentException} if a {@link AttributeKey} for the given {@param name} exists.
      */
     @SuppressWarnings("unchecked")
     public static <T> AttributeKey<T> newInstance(String name) {
-        return (AttributeKey<T>) pool.newInstance(name);
+        checkNotNull(name, "name");
+        AttributeKey<T> option = new AttributeKey<T>(name);
+        AttributeKey<T> old = names.putIfAbsent(name, option);
+        if (old != null) {
+            throw new IllegalArgumentException(String.format("'%s' is already in use", name));
+        }
+        return option;
     }
 
-    @SuppressWarnings("unchecked")
-    public static <T> AttributeKey<T> valueOf(Class<?> firstNameComponent, String secondNameComponent) {
-        return (AttributeKey<T>) pool.valueOf(firstNameComponent, secondNameComponent);
-    }
-
-    private AttributeKey(int id, String name) {
-        super(id, name);
+    /**
+     * @deprecated Use {@link #valueOf(String)} instead.
+     */
+    @Deprecated
+    public AttributeKey(String name) {
+        super(name);
     }
 }

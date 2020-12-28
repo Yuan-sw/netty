@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,7 +24,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
@@ -50,7 +49,7 @@ public class LocalTransportThreadModelTest {
     @BeforeClass
     public static void init() {
         // Configure a test server
-        group = new DefaultEventLoopGroup();
+        group = new LocalEventLoopGroup();
         ServerBootstrap sb = new ServerBootstrap();
         sb.group(group)
           .channel(LocalServerChannel.class)
@@ -85,12 +84,12 @@ public class LocalTransportThreadModelTest {
 
     @Test(timeout = 5000)
     public void testStagedExecution() throws Throwable {
-        EventLoopGroup l = new DefaultEventLoopGroup(4, new DefaultThreadFactory("l"));
+        EventLoopGroup l = new LocalEventLoopGroup(4, new DefaultThreadFactory("l"));
         EventExecutorGroup e1 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e1"));
         EventExecutorGroup e2 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e2"));
         ThreadNameAuditor h1 = new ThreadNameAuditor();
         ThreadNameAuditor h2 = new ThreadNameAuditor();
-        ThreadNameAuditor h3 = new ThreadNameAuditor(true);
+        ThreadNameAuditor h3 = new ThreadNameAuditor();
 
         Channel ch = new LocalChannel();
         // With no EventExecutor specified, h1 will be always invoked by EventLoop 'l'.
@@ -228,7 +227,7 @@ public class LocalTransportThreadModelTest {
     @Test(timeout = 30000)
     @Ignore
     public void testConcurrentMessageBufferAccess() throws Throwable {
-        EventLoopGroup l = new DefaultEventLoopGroup(4, new DefaultThreadFactory("l"));
+        EventLoopGroup l = new LocalEventLoopGroup(4, new DefaultThreadFactory("l"));
         EventExecutorGroup e1 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e1"));
         EventExecutorGroup e2 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e2"));
         EventExecutorGroup e3 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e3"));
@@ -361,15 +360,6 @@ public class LocalTransportThreadModelTest {
         private final Queue<String> inboundThreadNames = new ConcurrentLinkedQueue<String>();
         private final Queue<String> outboundThreadNames = new ConcurrentLinkedQueue<String>();
         private final Queue<String> removalThreadNames = new ConcurrentLinkedQueue<String>();
-        private final boolean discard;
-
-        ThreadNameAuditor() {
-            this(false);
-        }
-
-        ThreadNameAuditor(boolean discard) {
-            this.discard = discard;
-        }
 
         @Override
         public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
@@ -379,9 +369,7 @@ public class LocalTransportThreadModelTest {
         @Override
         public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
             inboundThreadNames.add(Thread.currentThread().getName());
-            if (!discard) {
-                ctx.fireChannelRead(msg);
-            }
+            ctx.fireChannelRead(msg);
         }
 
         @Override

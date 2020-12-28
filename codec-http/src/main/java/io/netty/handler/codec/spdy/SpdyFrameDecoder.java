@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -38,10 +38,8 @@ import static io.netty.handler.codec.spdy.SpdyCodecUtil.getSignedInt;
 import static io.netty.handler.codec.spdy.SpdyCodecUtil.getUnsignedInt;
 import static io.netty.handler.codec.spdy.SpdyCodecUtil.getUnsignedMedium;
 import static io.netty.handler.codec.spdy.SpdyCodecUtil.getUnsignedShort;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.util.internal.ObjectUtil;
 
 /**
  * Decodes {@link ByteBuf}s into SPDY Frames.
@@ -91,9 +89,19 @@ public class SpdyFrameDecoder {
      * Creates a new instance with the specified parameters.
      */
     public SpdyFrameDecoder(SpdyVersion spdyVersion, SpdyFrameDecoderDelegate delegate, int maxChunkSize) {
-        this.spdyVersion = ObjectUtil.checkNotNull(spdyVersion, "spdyVersion").getVersion();
-        this.delegate = ObjectUtil.checkNotNull(delegate, "delegate");
-        this.maxChunkSize = ObjectUtil.checkPositive(maxChunkSize, "maxChunkSize");
+        if (spdyVersion == null) {
+            throw new NullPointerException("spdyVersion");
+        }
+        if (delegate == null) {
+            throw new NullPointerException("delegate");
+        }
+        if (maxChunkSize <= 0) {
+            throw new IllegalArgumentException(
+                    "maxChunkSize must be a positive integer: " + maxChunkSize);
+        }
+        this.spdyVersion = spdyVersion.getVersion();
+        this.delegate = delegate;
+        this.maxChunkSize = maxChunkSize;
         state = State.READ_COMMON_HEADER;
     }
 

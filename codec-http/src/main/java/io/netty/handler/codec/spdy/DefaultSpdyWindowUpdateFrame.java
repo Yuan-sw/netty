@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,9 +14,6 @@
  * under the License.
  */
 package io.netty.handler.codec.spdy;
-
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 import io.netty.util.internal.StringUtil;
 
@@ -46,7 +43,10 @@ public class DefaultSpdyWindowUpdateFrame implements SpdyWindowUpdateFrame {
 
     @Override
     public SpdyWindowUpdateFrame setStreamId(int streamId) {
-        checkPositiveOrZero(streamId, "streamId");
+        if (streamId < 0) {
+            throw new IllegalArgumentException(
+                    "Stream-ID cannot be negative: " + streamId);
+        }
         this.streamId = streamId;
         return this;
     }
@@ -58,7 +58,11 @@ public class DefaultSpdyWindowUpdateFrame implements SpdyWindowUpdateFrame {
 
     @Override
     public SpdyWindowUpdateFrame setDeltaWindowSize(int deltaWindowSize) {
-        checkPositive(deltaWindowSize, "deltaWindowSize");
+        if (deltaWindowSize <= 0) {
+            throw new IllegalArgumentException(
+                    "Delta-Window-Size must be positive: " +
+                    deltaWindowSize);
+        }
         this.deltaWindowSize = deltaWindowSize;
         return this;
     }

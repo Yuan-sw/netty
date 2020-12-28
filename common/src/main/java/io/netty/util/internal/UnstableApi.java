@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -28,7 +28,7 @@ import java.lang.annotation.Target;
  *
  * <ol>
  *     <li>Is not needed for things located in *.internal.* packages</li>
- *     <li>Only public accessible classes/interfaces must be annotated</li>
+ *     <li>Only public acessible classes/interfaces must be annotated</li>
  *     <li>If this annotation is not present the API is considered stable and so no backward compatibility can be
  *         broken in a non-major release!</li>
  * </ol>

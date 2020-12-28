@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,7 +18,6 @@ package io.netty.channel.sctp;
 import com.sun.nio.sctp.MessageInfo;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.DefaultByteBufHolder;
-import io.netty.util.internal.ObjectUtil;
 
 /**
  * Representation of SCTP Data Chunk
@@ -62,10 +61,13 @@ public final class SctpMessage extends DefaultByteBufHolder {
      */
     public SctpMessage(MessageInfo msgInfo, ByteBuf payloadBuffer) {
         super(payloadBuffer);
-        this.msgInfo = ObjectUtil.checkNotNull(msgInfo, "msgInfo");
-        this.streamIdentifier = msgInfo.streamNumber();
-        this.protocolIdentifier = msgInfo.payloadProtocolID();
-        this.unordered = msgInfo.isUnordered();
+        if (msgInfo == null) {
+            throw new NullPointerException("msgInfo");
+        }
+        this.msgInfo = msgInfo;
+        streamIdentifier = msgInfo.streamNumber();
+        protocolIdentifier = msgInfo.payloadProtocolID();
+        unordered = msgInfo.isUnordered();
     }
 
     /**
@@ -133,7 +135,11 @@ public final class SctpMessage extends DefaultByteBufHolder {
             return false;
         }
 
-        return content().equals(sctpFrame.content());
+        if (!content().equals(sctpFrame.content())) {
+            return false;
+        }
+
+        return true;
     }
 
     @Override
@@ -148,25 +154,19 @@ public final class SctpMessage extends DefaultByteBufHolder {
 
     @Override
     public SctpMessage copy() {
-        return (SctpMessage) super.copy();
+        if (msgInfo == null) {
+            return new SctpMessage(protocolIdentifier, streamIdentifier, unordered, content().copy());
+        } else {
+            return new SctpMessage(msgInfo, content().copy());
+        }
     }
 
     @Override
     public SctpMessage duplicate() {
-        return (SctpMessage) super.duplicate();
-    }
-
-    @Override
-    public SctpMessage retainedDuplicate() {
-        return (SctpMessage) super.retainedDuplicate();
-    }
-
-    @Override
-    public SctpMessage replace(ByteBuf content) {
         if (msgInfo == null) {
-            return new SctpMessage(protocolIdentifier, streamIdentifier, unordered, content);
+            return new SctpMessage(protocolIdentifier, streamIdentifier, unordered, content().duplicate());
         } else {
-            return new SctpMessage(msgInfo, content);
+            return new SctpMessage(msgInfo, content().duplicate());
         }
     }
 
@@ -179,18 +179,6 @@ public final class SctpMessage extends DefaultByteBufHolder {
     @Override
     public SctpMessage retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public SctpMessage touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public SctpMessage touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 

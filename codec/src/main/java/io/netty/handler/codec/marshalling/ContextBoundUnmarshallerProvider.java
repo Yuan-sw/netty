@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -35,7 +35,7 @@ import org.jboss.marshalling.Unmarshaller;
 public class ContextBoundUnmarshallerProvider extends DefaultUnmarshallerProvider {
 
     private static final AttributeKey<Unmarshaller> UNMARSHALLER = AttributeKey.valueOf(
-            ContextBoundUnmarshallerProvider.class, "UNMARSHALLER");
+            ContextBoundUnmarshallerProvider.class.getName() + ".UNMARSHALLER");
 
     public ContextBoundUnmarshallerProvider(MarshallerFactory factory, MarshallingConfiguration config) {
         super(factory, config);
@@ -43,7 +43,7 @@ public class ContextBoundUnmarshallerProvider extends DefaultUnmarshallerProvide
 
     @Override
     public Unmarshaller getUnmarshaller(ChannelHandlerContext ctx) throws Exception {
-        Attribute<Unmarshaller> attr = ctx.channel().attr(UNMARSHALLER);
+        Attribute<Unmarshaller> attr = ctx.attr(UNMARSHALLER);
         Unmarshaller unmarshaller = attr.get();
         if (unmarshaller == null) {
             unmarshaller = super.getUnmarshaller(ctx);

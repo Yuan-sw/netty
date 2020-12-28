@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,8 +20,6 @@ import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.base64.Base64;
 import io.netty.util.CharsetUtil;
 import io.netty.util.concurrent.FastThreadLocal;
-import io.netty.util.internal.PlatformDependent;
-import io.netty.util.internal.SuppressJava6Requirement;
 
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -36,9 +34,7 @@ final class WebSocketUtil {
         protected MessageDigest initialValue() throws Exception {
             try {
                 //Try to get a MessageDigest that uses MD5
-                //Suppress a warning about weak hash algorithm
-                //since it's defined in draft-ietf-hybi-thewebsocketprotocol-00
-                return MessageDigest.getInstance("MD5"); // lgtm [java/weak-cryptographic-algorithm]
+                return MessageDigest.getInstance("MD5");
             } catch (NoSuchAlgorithmException e) {
                 //This shouldn't happen! How old is the computer?
                 throw new InternalError("MD5 not supported on this platform - Outdated?");
@@ -51,9 +47,7 @@ final class WebSocketUtil {
         protected MessageDigest initialValue() throws Exception {
             try {
                 //Try to get a MessageDigest that uses SHA1
-                //Suppress a warning about weak hash algorithm
-                //since it's defined in draft-ietf-hybi-thewebsocketprotocol-00
-                return MessageDigest.getInstance("SHA1"); // lgtm [java/weak-cryptographic-algorithm]
+                return MessageDigest.getInstance("SHA1");
             } catch (NoSuchAlgorithmException e) {
                 //This shouldn't happen! How old is the computer?
                 throw new InternalError("SHA-1 not supported on this platform - Outdated?");
@@ -95,23 +89,11 @@ final class WebSocketUtil {
      * @param data The data to encode
      * @return An encoded string containing the data
      */
-    @SuppressJava6Requirement(reason = "Guarded with java version check")
     static String base64(byte[] data) {
-        if (PlatformDependent.javaVersion() >= 8) {
-            return java.util.Base64.getEncoder().encodeToString(data);
-        }
-        String encodedString;
         ByteBuf encodedData = Unpooled.wrappedBuffer(data);
-        try {
-            ByteBuf encoded = Base64.encode(encodedData);
-            try {
-                encodedString = encoded.toString(CharsetUtil.UTF_8);
-            } finally {
-                encoded.release();
-            }
-        } finally {
-            encodedData.release();
-        }
+        ByteBuf encoded = Base64.encode(encodedData);
+        String encodedString = encoded.toString(CharsetUtil.UTF_8);
+        encoded.release();
         return encodedString;
     }
 
@@ -123,7 +105,11 @@ final class WebSocketUtil {
      */
     static byte[] randomBytes(int size) {
         byte[] bytes = new byte[size];
-        PlatformDependent.threadLocalRandom().nextBytes(bytes);
+
+        for (int index = 0; index < size; index++) {
+            bytes[index] = (byte) randomNumber(0, 255);
+        }
+
         return bytes;
     }
 
@@ -135,29 +121,7 @@ final class WebSocketUtil {
      * @return A pseudo-random number
      */
     static int randomNumber(int minimum, int maximum) {
-        assert minimum < maximum;
-        double fraction = PlatformDependent.threadLocalRandom().nextDouble();
-
-        // the idea here is that nextDouble gives us a random value
-        //
-        //              0 <= fraction <= 1
-        //
-        // the distance from min to max declared as
-        //
-        //              dist = max - min
-        //
-        // satisfies the following
-        //
-        //              min + dist = max
-        //
-        // taking into account
-        //
-        //         0 <= fraction * dist <= dist
-        //
-        // we've got
-        //
-        //       min <= min + fraction * dist <= max
-        return (int) (minimum + fraction * (maximum - minimum));
+        return (int) (Math.random() * maximum + minimum);
     }
 
     /**

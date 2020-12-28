@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -28,36 +28,18 @@ public interface ByteBufHolder extends ReferenceCounted {
     ByteBuf content();
 
     /**
-     * Creates a deep copy of this {@link ByteBufHolder}.
+     * Create a deep copy of this {@link ByteBufHolder}.
      */
     ByteBufHolder copy();
 
     /**
-     * Duplicates this {@link ByteBufHolder}. Be aware that this will not automatically call {@link #retain()}.
+     * Duplicate the {@link ByteBufHolder}. Be aware that this will not automatically call {@link #retain()}.
      */
     ByteBufHolder duplicate();
-
-    /**
-     * Duplicates this {@link ByteBufHolder}. This method returns a retained duplicate unlike {@link #duplicate()}.
-     *
-     * @see ByteBuf#retainedDuplicate()
-     */
-    ByteBufHolder retainedDuplicate();
-
-    /**
-     * Returns a new {@link ByteBufHolder} which contains the specified {@code content}.
-     */
-    ByteBufHolder replace(ByteBuf content);
 
     @Override
     ByteBufHolder retain();
 
     @Override
     ByteBufHolder retain(int increment);
-
-    @Override
-    ByteBufHolder touch();
-
-    @Override
-    ByteBufHolder touch(Object hint);
 }

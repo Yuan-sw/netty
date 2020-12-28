@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -44,9 +44,9 @@ final class HttpMessageUtil {
     private static void appendCommon(StringBuilder buf, HttpMessage msg) {
         buf.append(StringUtil.simpleClassName(msg));
         buf.append("(decodeResult: ");
-        buf.append(msg.decoderResult());
+        buf.append(msg.getDecoderResult());
         buf.append(", version: ");
-        buf.append(msg.protocolVersion());
+        buf.append(msg.getProtocolVersion());
         buf.append(')');
         buf.append(StringUtil.NEWLINE);
     }
@@ -72,9 +72,9 @@ final class HttpMessageUtil {
     private static void appendFullCommon(StringBuilder buf, FullHttpMessage msg) {
         buf.append(StringUtil.simpleClassName(msg));
         buf.append("(decodeResult: ");
-        buf.append(msg.decoderResult());
+        buf.append(msg.getDecoderResult());
         buf.append(", version: ");
-        buf.append(msg.protocolVersion());
+        buf.append(msg.getProtocolVersion());
         buf.append(", content: ");
         buf.append(msg.content());
         buf.append(')');
@@ -82,18 +82,18 @@ final class HttpMessageUtil {
     }
 
     private static void appendInitialLine(StringBuilder buf, HttpRequest req) {
-        buf.append(req.method());
+        buf.append(req.getMethod());
         buf.append(' ');
-        buf.append(req.uri());
+        buf.append(req.getUri());
         buf.append(' ');
-        buf.append(req.protocolVersion());
+        buf.append(req.getProtocolVersion());
         buf.append(StringUtil.NEWLINE);
     }
 
     private static void appendInitialLine(StringBuilder buf, HttpResponse res) {
-        buf.append(res.protocolVersion());
+        buf.append(res.getProtocolVersion());
         buf.append(' ');
-        buf.append(res.status());
+        buf.append(res.getStatus());
         buf.append(StringUtil.NEWLINE);
     }
 

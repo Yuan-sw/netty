@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.handler.codec.spdy;
-
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 import io.netty.util.internal.StringUtil;
 
@@ -37,19 +35,7 @@ public class DefaultSpdySynStreamFrame extends DefaultSpdyHeadersFrame
      * @param priority           the priority of the stream
      */
     public DefaultSpdySynStreamFrame(int streamId, int associatedStreamId, byte priority) {
-        this(streamId, associatedStreamId, priority, true);
-    }
-
-    /**
-     * Creates a new instance.
-     *
-     * @param streamId           the Stream-ID of this frame
-     * @param associatedStreamId the Associated-To-Stream-ID of this frame
-     * @param priority           the priority of the stream
-     * @param validateHeaders    validate the header names and values when adding them to the {@link SpdyHeaders}
-     */
-    public DefaultSpdySynStreamFrame(int streamId, int associatedStreamId, byte priority, boolean validateHeaders) {
-        super(streamId, validateHeaders);
+        super(streamId);
         setAssociatedStreamId(associatedStreamId);
         setPriority(priority);
     }
@@ -79,7 +65,11 @@ public class DefaultSpdySynStreamFrame extends DefaultSpdyHeadersFrame
 
     @Override
     public SpdySynStreamFrame setAssociatedStreamId(int associatedStreamId) {
-        checkPositiveOrZero(associatedStreamId, "associatedStreamId");
+        if (associatedStreamId < 0) {
+            throw new IllegalArgumentException(
+                    "Associated-To-Stream-ID cannot be negative: " +
+                    associatedStreamId);
+        }
         this.associatedStreamId = associatedStreamId;
         return this;
     }

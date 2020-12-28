@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,7 +25,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -130,7 +129,6 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     private long lastChangeCheckTimeStamp;
     private int lastMessageHashCode;
     private long lastPendingWriteBytes;
-    private long lastFlushProgress;
 
     /**
      * Creates a new instance firing {@link IdleStateEvent}s.
@@ -191,7 +189,9 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     public IdleStateHandler(boolean observeOutput,
             long readerIdleTime, long writerIdleTime, long allIdleTime,
             TimeUnit unit) {
-        ObjectUtil.checkNotNull(unit, "unit");
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
 
         this.observeOutput = observeOutput;
 
@@ -299,7 +299,7 @@ public class IdleStateHandler extends ChannelDuplexHandler {
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
         // Allow writing with void promise if handler is only configured for read timeout events.
         if (writerIdleTimeNanos > 0 || allIdleTimeNanos > 0) {
-            ctx.write(msg, promise.unvoid()).addListener(writeListener);
+            ctx.write(msg, promise).addListener(writeListener);
         } else {
             ctx.write(msg, promise);
         }
@@ -399,7 +399,6 @@ public class IdleStateHandler extends ChannelDuplexHandler {
             if (buf != null) {
                 lastMessageHashCode = System.identityHashCode(buf.current());
                 lastPendingWriteBytes = buf.totalPendingWriteBytes();
-                lastFlushProgress = buf.currentProgress();
             }
         }
     }
@@ -439,15 +438,6 @@ public class IdleStateHandler extends ChannelDuplexHandler {
                 if (messageHashCode != lastMessageHashCode || pendingWriteBytes != lastPendingWriteBytes) {
                     lastMessageHashCode = messageHashCode;
                     lastPendingWriteBytes = pendingWriteBytes;
-
-                    if (!first) {
-                        return true;
-                    }
-                }
-
-                long flushProgress = buf.currentProgress();
-                if (flushProgress != lastFlushProgress) {
-                    lastFlushProgress = flushProgress;
 
                     if (!first) {
                         return true;

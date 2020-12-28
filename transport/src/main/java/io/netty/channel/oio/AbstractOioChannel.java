@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,25 +25,23 @@ import java.net.SocketAddress;
 
 /**
  * Abstract base class for {@link Channel} implementations that use Old-Blocking-IO
- *
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
 public abstract class AbstractOioChannel extends AbstractChannel {
 
     protected static final int SO_TIMEOUT = 1000;
 
-    boolean readPending;
+    private volatile boolean readPending;
+
     private final Runnable readTask = new Runnable() {
         @Override
         public void run() {
+            if (!isReadPending() && !config().isAutoRead()) {
+                // ChannelConfig.setAutoRead(false) was called in the meantime so just return
+                return;
+            }
+
+            setReadPending(false);
             doRead();
-        }
-    };
-    private final Runnable clearReadPendingRunnable = new Runnable() {
-        @Override
-        public void run() {
-            readPending = false;
         }
     };
 
@@ -100,62 +98,21 @@ public abstract class AbstractOioChannel extends AbstractChannel {
 
     @Override
     protected void doBeginRead() throws Exception {
-        if (readPending) {
+        if (isReadPending()) {
             return;
         }
 
-        readPending = true;
+        setReadPending(true);
         eventLoop().execute(readTask);
     }
 
     protected abstract void doRead();
 
-    /**
-     * @deprecated No longer supported.
-     * No longer supported.
-     */
-    @Deprecated
     protected boolean isReadPending() {
         return readPending;
     }
 
-    /**
-     * @deprecated Use {@link #clearReadPending()} if appropriate instead.
-     * No longer supported.
-     */
-    @Deprecated
-    protected void setReadPending(final boolean readPending) {
-        if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
-            if (eventLoop.inEventLoop()) {
-                this.readPending = readPending;
-            } else {
-                eventLoop.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        AbstractOioChannel.this.readPending = readPending;
-                    }
-                });
-            }
-        } else {
-            this.readPending = readPending;
-        }
-    }
-
-    /**
-     * Set read pending to {@code false}.
-     */
-    protected final void clearReadPending() {
-        if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
-            if (eventLoop.inEventLoop()) {
-                readPending = false;
-            } else {
-                eventLoop.execute(clearReadPendingRunnable);
-            }
-        } else {
-            // Best effort if we are not registered yet clear readPending. This happens during channel initialization.
-            readPending = false;
-        }
+    protected void setReadPending(boolean readPending) {
+        this.readPending = readPending;
     }
 }

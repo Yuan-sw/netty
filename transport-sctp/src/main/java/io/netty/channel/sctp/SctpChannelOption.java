@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,7 +15,7 @@
  */
 package io.netty.channel.sctp;
 
-import com.sun.nio.sctp.SctpStandardSocketOptions.InitMaxStreams;
+import com.sun.nio.sctp.SctpStandardSocketOptions;
 import io.netty.channel.ChannelOption;
 
 import java.net.SocketAddress;
@@ -23,26 +23,29 @@ import java.net.SocketAddress;
 /**
  * Option for configuring the SCTP transport
  */
-public final class SctpChannelOption<T> extends ChannelOption<T> {
+@SuppressWarnings("deprecation")
+public class SctpChannelOption<T> extends ChannelOption<T> {
+    public static final SctpChannelOption<Boolean> SCTP_DISABLE_FRAGMENTS =
+            new SctpChannelOption<Boolean>("SCTP_DISABLE_FRAGMENTS");
+    public static final SctpChannelOption<Boolean> SCTP_EXPLICIT_COMPLETE =
+            new SctpChannelOption<Boolean>("SCTP_EXPLICIT_COMPLETE");
+    public static final SctpChannelOption<Integer> SCTP_FRAGMENT_INTERLEAVE =
+            new SctpChannelOption<Integer>("SCTP_FRAGMENT_INTERLEAVE");
+    public static final SctpChannelOption<SctpStandardSocketOptions.InitMaxStreams> SCTP_INIT_MAXSTREAMS =
+            new SctpChannelOption<SctpStandardSocketOptions.InitMaxStreams>("SCTP_INIT_MAXSTREAMS");
 
-    public static final ChannelOption<Boolean> SCTP_DISABLE_FRAGMENTS =
-            valueOf(SctpChannelOption.class, "SCTP_DISABLE_FRAGMENTS");
-    public static final ChannelOption<Boolean> SCTP_EXPLICIT_COMPLETE =
-            valueOf(SctpChannelOption.class, "SCTP_EXPLICIT_COMPLETE");
-    public static final ChannelOption<Integer> SCTP_FRAGMENT_INTERLEAVE =
-            valueOf(SctpChannelOption.class, "SCTP_FRAGMENT_INTERLEAVE");
-    public static final ChannelOption<InitMaxStreams> SCTP_INIT_MAXSTREAMS =
-            valueOf(SctpChannelOption.class, "SCTP_INIT_MAXSTREAMS");
+    public static final SctpChannelOption<Boolean> SCTP_NODELAY =
+            new SctpChannelOption<Boolean>("SCTP_NODELAY");
+    public static final SctpChannelOption<SocketAddress> SCTP_PRIMARY_ADDR =
+            new SctpChannelOption<SocketAddress>("SCTP_PRIMARY_ADDR");
+    public static final SctpChannelOption<SocketAddress> SCTP_SET_PEER_PRIMARY_ADDR =
+            new SctpChannelOption<SocketAddress>("SCTP_SET_PEER_PRIMARY_ADDR");
 
-    public static final ChannelOption<Boolean> SCTP_NODELAY =
-            valueOf(SctpChannelOption.class, "SCTP_NODELAY");
-    public static final ChannelOption<SocketAddress> SCTP_PRIMARY_ADDR =
-            valueOf(SctpChannelOption.class, "SCTP_PRIMARY_ADDR");
-    public static final ChannelOption<SocketAddress> SCTP_SET_PEER_PRIMARY_ADDR =
-            valueOf(SctpChannelOption.class, "SCTP_SET_PEER_PRIMARY_ADDR");
-
-    @SuppressWarnings({ "unused", "deprecation" })
-    private SctpChannelOption() {
-        super(null);
+    /**
+     * @deprecated Will be removed in the future release.
+     */
+    @Deprecated
+    protected SctpChannelOption(String name) {
+        super(name);
     }
 }

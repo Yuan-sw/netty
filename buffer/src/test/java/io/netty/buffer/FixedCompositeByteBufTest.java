@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,7 @@
 package io.netty.buffer;
 
 
-import org.junit.Assume;
+import org.junit.After;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
@@ -25,12 +25,40 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ReadOnlyBufferException;
 import java.nio.channels.ScatteringByteChannel;
+import java.util.ArrayDeque;
+import java.util.Queue;
 import java.nio.charset.Charset;
 
-import static io.netty.buffer.Unpooled.*;
+import static io.netty.buffer.Unpooled.buffer;
+import static io.netty.buffer.Unpooled.compositeBuffer;
+import static io.netty.buffer.Unpooled.directBuffer;
+import static io.netty.buffer.Unpooled.unmodifiableBuffer;
+import static io.netty.buffer.Unpooled.wrappedBuffer;
+
 import static org.junit.Assert.*;
 
 public class FixedCompositeByteBufTest {
+
+    private static final Queue<ByteBuf> freeLaterQueue = new ArrayDeque<ByteBuf>();
+
+    protected static <T extends ByteBuf> T freeLater(T buf) {
+        freeLaterQueue.add(buf);
+        return buf;
+    }
+
+    @After
+    public void dispose() {
+        for (;;) {
+            ByteBuf buf = freeLaterQueue.poll();
+            if (buf == null) {
+                break;
+            }
+
+            if (buf.refCnt() > 0) {
+                buf.release(buf.refCnt());
+            }
+        }
+    }
 
     private static ByteBuf newBuffer(ByteBuf... buffers) {
         return new FixedCompositeByteBuf(UnpooledByteBufAllocator.DEFAULT, buffers);
@@ -216,19 +244,18 @@ public class FixedCompositeByteBufTest {
     }
 
     private static void testGatheringWrites(ByteBuf buf1, ByteBuf buf2) throws Exception {
-        CompositeByteBuf buf = compositeBuffer();
+        CompositeByteBuf buf = freeLater(compositeBuffer());
         buf.addComponent(buf1.writeBytes(new byte[]{1, 2}));
         buf.addComponent(buf2.writeBytes(new byte[]{1, 2}));
         buf.writerIndex(3);
         buf.readerIndex(1);
 
         AbstractByteBufTest.TestGatheringByteChannel channel = new AbstractByteBufTest.TestGatheringByteChannel();
+
         buf.readBytes(channel, 2);
 
         byte[] data = new byte[2];
         buf.getBytes(1, data);
-        buf.release();
-
         assertArrayEquals(data, channel.writtenBytes());
     }
 
@@ -301,7 +328,6 @@ public class FixedCompositeByteBufTest {
         byte[] data = new byte[2];
         buf.getBytes(1, data);
         assertArrayEquals(data, channel.writtenBytes());
-
         buf.release();
     }
 
@@ -377,81 +403,5 @@ public class FixedCompositeByteBufTest {
     public void testEmptyArray() {
         ByteBuf buf = newBuffer(new ByteBuf[0]);
         buf.release();
-    }
-
-    @Test
-    public void testHasMemoryAddressWithSingleBuffer() {
-        ByteBuf buf1 = directBuffer(10);
-        if (!buf1.hasMemoryAddress()) {
-            buf1.release();
-            return;
-        }
-        ByteBuf buf = newBuffer(buf1);
-        assertTrue(buf.hasMemoryAddress());
-        assertEquals(buf1.memoryAddress(), buf.memoryAddress());
-        buf.release();
-    }
-
-    @Test
-    public void testHasMemoryAddressWhenEmpty() {
-        Assume.assumeTrue(EMPTY_BUFFER.hasMemoryAddress());
-        ByteBuf buf = newBuffer(new ByteBuf[0]);
-        assertTrue(buf.hasMemoryAddress());
-        assertEquals(EMPTY_BUFFER.memoryAddress(), buf.memoryAddress());
-        buf.release();
-    }
-
-    @Test
-    public void testHasNoMemoryAddressWhenMultipleBuffers() {
-        ByteBuf buf1 = directBuffer(10);
-        if (!buf1.hasMemoryAddress()) {
-            buf1.release();
-            return;
-        }
-
-        ByteBuf buf2 = directBuffer(10);
-        ByteBuf buf = newBuffer(buf1, buf2);
-        assertFalse(buf.hasMemoryAddress());
-        try {
-            buf.memoryAddress();
-            fail();
-        } catch (UnsupportedOperationException expected) {
-            // expected
-        } finally {
-            buf.release();
-        }
-    }
-
-    @Test
-    public void testHasArrayWithSingleBuffer() {
-        ByteBuf buf1 = buffer(10);
-        ByteBuf buf = newBuffer(buf1);
-        assertTrue(buf.hasArray());
-        assertArrayEquals(buf1.array(), buf.array());
-        buf.release();
-    }
-
-    @Test
-    public void testHasArrayWhenEmptyAndIsDirect() {
-        ByteBuf buf = newBuffer(new ByteBuf[0]);
-        assertTrue(buf.hasArray());
-        assertArrayEquals(EMPTY_BUFFER.array(), buf.array());
-        assertEquals(EMPTY_BUFFER.isDirect(), buf.isDirect());
-        assertEquals(EMPTY_BUFFER.memoryAddress(), buf.memoryAddress());
-        buf.release();
-    }
-
-    @Test(expected = UnsupportedOperationException.class)
-    public void testHasNoArrayWhenMultipleBuffers() {
-        ByteBuf buf1 = buffer(10);
-        ByteBuf buf2 = buffer(10);
-        ByteBuf buf = newBuffer(buf1, buf2);
-        assertFalse(buf.hasArray());
-        try {
-            buf.array();
-            fail();
-        } finally {
-            buf.release();
-        }
     }
 }

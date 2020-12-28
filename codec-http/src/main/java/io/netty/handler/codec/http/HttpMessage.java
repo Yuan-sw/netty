@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,7 +17,7 @@ package io.netty.handler.codec.http;
 
 
 /**
- * An interface that defines an HTTP message, providing common properties for
+ * An interface that defines a HTTP message, providing common properties for
  * {@link HttpRequest} and {@link HttpResponse}.
  *
  * @see HttpResponse
@@ -27,15 +27,11 @@ package io.netty.handler.codec.http;
 public interface HttpMessage extends HttpObject {
 
     /**
-     * @deprecated Use {@link #protocolVersion()} instead.
-     */
-    @Deprecated
-    HttpVersion getProtocolVersion();
-
-    /**
      * Returns the protocol version of this {@link HttpMessage}
+     *
+     * @return The protocol version
      */
-    HttpVersion protocolVersion();
+    HttpVersion getProtocolVersion();
 
     /**
      * Set the protocol version of this {@link HttpMessage}

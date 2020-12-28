@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,63 +16,62 @@
 package io.netty.channel.epoll;
 
 import io.netty.channel.unix.FileDescriptor;
-import io.netty.channel.unix.Unix;
-import io.netty.util.internal.SystemPropertyUtil;
+import io.netty.util.internal.PlatformDependent;
 
 /**
- * Tells if <a href="https://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a> is
- * supported.
+ * Tells if <a href="http://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a> is supported.
  */
 public final class Epoll {
 
     private static final Throwable UNAVAILABILITY_CAUSE;
 
-    static {
+    static  {
         Throwable cause = null;
-
-        if (SystemPropertyUtil.getBoolean("io.netty.transport.noNative", false)) {
-            cause = new UnsupportedOperationException(
-                    "Native transport was explicit disabled with -Dio.netty.transport.noNative=true");
-        } else {
-            FileDescriptor epollFd = null;
-            FileDescriptor eventFd = null;
-            try {
-                Unix.ensureAvailability();
-                epollFd = Native.newEpollCreate();
-                eventFd = Native.newEventFd();
-            } catch (Throwable t) {
-                cause = t;
-            } finally {
-                if (epollFd != null) {
-                    try {
-                        epollFd.close();
-                    } catch (Exception ignore) {
-                        // ignore
-                    }
+        FileDescriptor epollFd = null;
+        FileDescriptor eventFd = null;
+        try {
+            epollFd = Native.newEpollCreate();
+            eventFd = Native.newEventFd();
+        } catch (Throwable t) {
+            cause = t;
+        } finally {
+            if (epollFd != null) {
+                try {
+                    epollFd.close();
+                } catch (Exception ignore) {
+                    // ignore
                 }
-                if (eventFd != null) {
-                    try {
-                        eventFd.close();
-                    } catch (Exception ignore) {
-                        // ignore
-                    }
+            }
+            if (eventFd != null) {
+                try {
+                    eventFd.close();
+                } catch (Exception ignore) {
+                    // ignore
                 }
             }
         }
 
-        UNAVAILABILITY_CAUSE = cause;
+        if (cause != null) {
+            UNAVAILABILITY_CAUSE = cause;
+        } else {
+            UNAVAILABILITY_CAUSE = PlatformDependent.hasUnsafe()
+                    ? null
+                    : new IllegalStateException(
+                            "sun.misc.Unsafe not available",
+                            PlatformDependent.getUnsafeUnavailabilityCause());
+        }
     }
 
     /**
-     * Returns {@code true} if and only if the <a href="https://netty.io/wiki/native-transports.html">{@code
-     * netty-transport-native-epoll}</a> is available.
+     * Returns {@code true} if and only if the
+     * <a href="http://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a> is available.
      */
     public static boolean isAvailable() {
         return UNAVAILABILITY_CAUSE == null;
     }
 
     /**
-     * Ensure that <a href="https://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a> is
+     * Ensure that <a href="http://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a> is
      * available.
      *
      * @throws UnsatisfiedLinkError if unavailable
@@ -85,8 +84,8 @@ public final class Epoll {
     }
 
     /**
-     * Returns the cause of unavailability of <a href="https://netty.io/wiki/native-transports.html">
-     * {@code netty-transport-native-epoll}</a>.
+     * Returns the cause of unavailability of
+     * <a href="http://netty.io/wiki/native-transports.html">{@code netty-transport-native-epoll}</a>.
      *
      * @return the cause if unavailable. {@code null} if available.
      */
@@ -94,6 +93,5 @@ public final class Epoll {
         return UNAVAILABILITY_CAUSE;
     }
 
-    private Epoll() {
-    }
+    private Epoll() { }
 }

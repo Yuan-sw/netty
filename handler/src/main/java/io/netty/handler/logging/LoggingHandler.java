@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,9 +21,7 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelOutboundHandler;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.logging.InternalLogLevel;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -35,10 +33,9 @@ import static io.netty.util.internal.StringUtil.NEWLINE;
 
 /**
  * A {@link ChannelHandler} that logs all events using a logging framework.
- * By default, all events are logged at <tt>DEBUG</tt> level and full hex dumps are recorded for ByteBufs.
+ * By default, all events are logged at <tt>DEBUG</tt> level.
  */
 @Sharable
-@SuppressWarnings({ "StringConcatenationInsideStringBufferAppend", "StringBufferReplaceableByString" })
 public class LoggingHandler extends ChannelDuplexHandler {
 
     private static final LogLevel DEFAULT_LEVEL = LogLevel.DEBUG;
@@ -47,7 +44,6 @@ public class LoggingHandler extends ChannelDuplexHandler {
     protected final InternalLogLevel internalLevel;
 
     private final LogLevel level;
-    private final ByteBufFormat byteBufFormat;
 
     /**
      * Creates a new instance whose logger name is the fully qualified class
@@ -61,31 +57,21 @@ public class LoggingHandler extends ChannelDuplexHandler {
      * Creates a new instance whose logger name is the fully qualified class
      * name of the instance.
      *
-     * @param level the log level
+     * @param level   the log level
      */
     public LoggingHandler(LogLevel level) {
-        this(level, ByteBufFormat.HEX_DUMP);
-    }
+        if (level == null) {
+            throw new NullPointerException("level");
+        }
 
-    /**
-     * Creates a new instance whose logger name is the fully qualified class
-     * name of the instance.
-     *
-     * @param level the log level
-     * @param byteBufFormat the ByteBuf format
-     */
-    public LoggingHandler(LogLevel level, ByteBufFormat byteBufFormat) {
-        this.level = ObjectUtil.checkNotNull(level, "level");
-        this.byteBufFormat = ObjectUtil.checkNotNull(byteBufFormat, "byteBufFormat");
         logger = InternalLoggerFactory.getInstance(getClass());
+        this.level = level;
         internalLevel = level.toInternalLevel();
     }
 
     /**
      * Creates a new instance with the specified logger name and with hex dump
      * enabled.
-     *
-     * @param clazz the class type to generate the logger for
      */
     public LoggingHandler(Class<?> clazz) {
         this(clazz, DEFAULT_LEVEL);
@@ -94,32 +80,22 @@ public class LoggingHandler extends ChannelDuplexHandler {
     /**
      * Creates a new instance with the specified logger name.
      *
-     * @param clazz the class type to generate the logger for
-     * @param level the log level
+     * @param level   the log level
      */
     public LoggingHandler(Class<?> clazz, LogLevel level) {
-        this(clazz, level, ByteBufFormat.HEX_DUMP);
-    }
-
-    /**
-     * Creates a new instance with the specified logger name.
-     *
-     * @param clazz the class type to generate the logger for
-     * @param level the log level
-     * @param byteBufFormat the ByteBuf format
-     */
-    public LoggingHandler(Class<?> clazz, LogLevel level, ByteBufFormat byteBufFormat) {
-        ObjectUtil.checkNotNull(clazz, "clazz");
-        this.level = ObjectUtil.checkNotNull(level, "level");
-        this.byteBufFormat = ObjectUtil.checkNotNull(byteBufFormat, "byteBufFormat");
+        if (clazz == null) {
+            throw new NullPointerException("clazz");
+        }
+        if (level == null) {
+            throw new NullPointerException("level");
+        }
         logger = InternalLoggerFactory.getInstance(clazz);
+        this.level = level;
         internalLevel = level.toInternalLevel();
     }
 
     /**
-     * Creates a new instance with the specified logger name using the default log level.
-     *
-     * @param name the name of the class to use for the logger
+     * Creates a new instance with the specified logger name.
      */
     public LoggingHandler(String name) {
         this(name, DEFAULT_LEVEL);
@@ -128,26 +104,17 @@ public class LoggingHandler extends ChannelDuplexHandler {
     /**
      * Creates a new instance with the specified logger name.
      *
-     * @param name the name of the class to use for the logger
-     * @param level the log level
+     * @param level   the log level
      */
     public LoggingHandler(String name, LogLevel level) {
-        this(name, level, ByteBufFormat.HEX_DUMP);
-    }
-
-    /**
-     * Creates a new instance with the specified logger name.
-     *
-     * @param name the name of the class to use for the logger
-     * @param level the log level
-     * @param byteBufFormat the ByteBuf format
-     */
-    public LoggingHandler(String name, LogLevel level, ByteBufFormat byteBufFormat) {
-        ObjectUtil.checkNotNull(name, "name");
-
-        this.level = ObjectUtil.checkNotNull(level, "level");
-        this.byteBufFormat = ObjectUtil.checkNotNull(byteBufFormat, "byteBufFormat");
+        if (name == null) {
+            throw new NullPointerException("name");
+        }
+        if (level == null) {
+            throw new NullPointerException("level");
+        }
         logger = InternalLoggerFactory.getInstance(name);
+        this.level = level;
         internalLevel = level.toInternalLevel();
     }
 
@@ -158,101 +125,113 @@ public class LoggingHandler extends ChannelDuplexHandler {
         return level;
     }
 
-    /**
-     * Returns the {@link ByteBufFormat} that this handler uses to log
-     */
-    public ByteBufFormat byteBufFormat() {
-        return byteBufFormat;
+    protected String format(ChannelHandlerContext ctx, String message) {
+        String chStr = ctx.channel().toString();
+        return new StringBuilder(chStr.length() + message.length() + 1)
+        .append(chStr)
+        .append(' ')
+        .append(message)
+        .toString();
     }
 
     @Override
-    public void channelRegistered(ChannelHandlerContext ctx) throws Exception {
+    public void channelRegistered(ChannelHandlerContext ctx)
+            throws Exception {
         if (logger.isEnabled(internalLevel)) {
             logger.log(internalLevel, format(ctx, "REGISTERED"));
         }
-        ctx.fireChannelRegistered();
+        super.channelRegistered(ctx);
     }
 
     @Override
-    public void channelUnregistered(ChannelHandlerContext ctx) throws Exception {
+    public void channelUnregistered(ChannelHandlerContext ctx)
+            throws Exception {
         if (logger.isEnabled(internalLevel)) {
             logger.log(internalLevel, format(ctx, "UNREGISTERED"));
         }
-        ctx.fireChannelUnregistered();
+        super.channelUnregistered(ctx);
     }
 
     @Override
-    public void channelActive(ChannelHandlerContext ctx) throws Exception {
+    public void channelActive(ChannelHandlerContext ctx)
+            throws Exception {
         if (logger.isEnabled(internalLevel)) {
             logger.log(internalLevel, format(ctx, "ACTIVE"));
         }
-        ctx.fireChannelActive();
+        super.channelActive(ctx);
     }
 
     @Override
-    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+    public void channelInactive(ChannelHandlerContext ctx)
+            throws Exception {
         if (logger.isEnabled(internalLevel)) {
             logger.log(internalLevel, format(ctx, "INACTIVE"));
         }
-        ctx.fireChannelInactive();
+        super.channelInactive(ctx);
     }
 
     @Override
-    public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
+    public void exceptionCaught(ChannelHandlerContext ctx,
+            Throwable cause) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "EXCEPTION", cause), cause);
+            logger.log(internalLevel, format(ctx, "EXCEPTION: " + cause), cause);
         }
-        ctx.fireExceptionCaught(cause);
+        super.exceptionCaught(ctx, cause);
     }
 
     @Override
-    public void userEventTriggered(ChannelHandlerContext ctx, Object evt) throws Exception {
+    public void userEventTriggered(ChannelHandlerContext ctx,
+            Object evt) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "USER_EVENT", evt));
+            logger.log(internalLevel, format(ctx, "USER_EVENT: " + evt));
         }
-        ctx.fireUserEventTriggered(evt);
+        super.userEventTriggered(ctx, evt);
     }
 
     @Override
-    public void bind(ChannelHandlerContext ctx, SocketAddress localAddress, ChannelPromise promise) throws Exception {
+    public void bind(ChannelHandlerContext ctx,
+            SocketAddress localAddress, ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "BIND", localAddress));
+            logger.log(internalLevel, format(ctx, "BIND(" + localAddress + ')'));
         }
-        ctx.bind(localAddress, promise);
+        super.bind(ctx, localAddress, promise);
     }
 
     @Override
-    public void connect(
-            ChannelHandlerContext ctx,
-            SocketAddress remoteAddress, SocketAddress localAddress, ChannelPromise promise) throws Exception {
+    public void connect(ChannelHandlerContext ctx,
+            SocketAddress remoteAddress, SocketAddress localAddress,
+            ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "CONNECT", remoteAddress, localAddress));
+            logger.log(internalLevel, format(ctx, "CONNECT(" + remoteAddress + ", " + localAddress + ')'));
         }
-        ctx.connect(remoteAddress, localAddress, promise);
+        super.connect(ctx, remoteAddress, localAddress, promise);
     }
 
     @Override
-    public void disconnect(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public void disconnect(ChannelHandlerContext ctx,
+            ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "DISCONNECT"));
+            logger.log(internalLevel, format(ctx, "DISCONNECT()"));
         }
-        ctx.disconnect(promise);
+        super.disconnect(ctx, promise);
     }
 
     @Override
-    public void close(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public void close(ChannelHandlerContext ctx,
+            ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "CLOSE"));
+            logger.log(internalLevel, format(ctx, "CLOSE()"));
         }
-        ctx.close(promise);
+        super.close(ctx, promise);
     }
 
     @Override
-    public void deregister(ChannelHandlerContext ctx, ChannelPromise promise) throws Exception {
+    public void deregister(ChannelHandlerContext ctx,
+             ChannelPromise promise) throws Exception {
         if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "DEREGISTER"));
+            logger.log(internalLevel, format(ctx, "DEREGISTER()"));
         }
-        ctx.deregister(promise);
+        super.deregister(ctx, promise);
     }
 
     @Override
@@ -265,17 +244,13 @@ public class LoggingHandler extends ChannelDuplexHandler {
 
     @Override
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
-        if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "READ", msg));
-        }
+        logMessage(ctx, "READ", msg);
         ctx.fireChannelRead(msg);
     }
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (logger.isEnabled(internalLevel)) {
-            logger.log(internalLevel, format(ctx, "WRITE", msg));
-        }
+        logMessage(ctx, "WRITE", msg);
         ctx.write(msg, promise);
     }
 
@@ -295,124 +270,74 @@ public class LoggingHandler extends ChannelDuplexHandler {
         ctx.flush();
     }
 
-    /**
-     * Formats an event and returns the formatted message.
-     *
-     * @param eventName the name of the event
-     */
-    protected String format(ChannelHandlerContext ctx, String eventName) {
-        String chStr = ctx.channel().toString();
-        return new StringBuilder(chStr.length() + 1 + eventName.length())
-            .append(chStr)
-            .append(' ')
-            .append(eventName)
-            .toString();
+    private void logMessage(ChannelHandlerContext ctx, String eventName, Object msg) {
+        if (logger.isEnabled(internalLevel)) {
+            logger.log(internalLevel, format(ctx, formatMessage(eventName, msg)));
+        }
     }
 
-    /**
-     * Formats an event and returns the formatted message.
-     *
-     * @param eventName the name of the event
-     * @param arg       the argument of the event
-     */
-    protected String format(ChannelHandlerContext ctx, String eventName, Object arg) {
-        if (arg instanceof ByteBuf) {
-            return formatByteBuf(ctx, eventName, (ByteBuf) arg);
-        } else if (arg instanceof ByteBufHolder) {
-            return formatByteBufHolder(ctx, eventName, (ByteBufHolder) arg);
+    protected String formatMessage(String eventName, Object msg) {
+        if (msg instanceof ByteBuf) {
+            return formatByteBuf(eventName, (ByteBuf) msg);
+        } else if (msg instanceof ByteBufHolder) {
+            return formatByteBufHolder(eventName, (ByteBufHolder) msg);
         } else {
-            return formatSimple(ctx, eventName, arg);
+            return formatNonByteBuf(eventName, msg);
         }
     }
 
     /**
-     * Formats an event and returns the formatted message.  This method is currently only used for formatting
-     * {@link ChannelOutboundHandler#connect(ChannelHandlerContext, SocketAddress, SocketAddress, ChannelPromise)}.
-     *
-     * @param eventName the name of the event
-     * @param firstArg  the first argument of the event
-     * @param secondArg the second argument of the event
+     * Returns a String which contains all details to log the {@link ByteBuf}
      */
-    protected String format(ChannelHandlerContext ctx, String eventName, Object firstArg, Object secondArg) {
-        if (secondArg == null) {
-            return formatSimple(ctx, eventName, firstArg);
-        }
-
-        String chStr = ctx.channel().toString();
-        String arg1Str = String.valueOf(firstArg);
-        String arg2Str = secondArg.toString();
-        StringBuilder buf = new StringBuilder(
-                chStr.length() + 1 + eventName.length() + 2 + arg1Str.length() + 2 + arg2Str.length());
-        buf.append(chStr).append(' ').append(eventName).append(": ").append(arg1Str).append(", ").append(arg2Str);
-        return buf.toString();
-    }
-
-    /**
-     * Generates the default log message of the specified event whose argument is a {@link ByteBuf}.
-     */
-    private String formatByteBuf(ChannelHandlerContext ctx, String eventName, ByteBuf msg) {
-        String chStr = ctx.channel().toString();
+    protected String formatByteBuf(String eventName, ByteBuf msg) {
         int length = msg.readableBytes();
         if (length == 0) {
-            StringBuilder buf = new StringBuilder(chStr.length() + 1 + eventName.length() + 4);
-            buf.append(chStr).append(' ').append(eventName).append(": 0B");
+            StringBuilder buf = new StringBuilder(eventName.length() + 4);
+            buf.append(eventName).append(": 0B");
             return buf.toString();
         } else {
-            int outputLength = chStr.length() + 1 + eventName.length() + 2 + 10 + 1;
-            if (byteBufFormat == ByteBufFormat.HEX_DUMP) {
-                int rows = length / 16 + (length % 15 == 0? 0 : 1) + 4;
-                int hexDumpLength = 2 + rows * 80;
-                outputLength += hexDumpLength;
-            }
-            StringBuilder buf = new StringBuilder(outputLength);
-            buf.append(chStr).append(' ').append(eventName).append(": ").append(length).append('B');
-            if (byteBufFormat == ByteBufFormat.HEX_DUMP) {
-                buf.append(NEWLINE);
-                appendPrettyHexDump(buf, msg);
-            }
+            int rows = length / 16 + (length % 15 == 0? 0 : 1) + 4;
+            StringBuilder buf = new StringBuilder(eventName.length() + 2 + 10 + 1 + 2 + rows * 80);
+
+            buf.append(eventName).append(": ").append(length).append('B').append(NEWLINE);
+            appendPrettyHexDump(buf, msg);
 
             return buf.toString();
         }
     }
 
     /**
-     * Generates the default log message of the specified event whose argument is a {@link ByteBufHolder}.
+     * Returns a String which contains all details to log the {@link Object}
      */
-    private String formatByteBufHolder(ChannelHandlerContext ctx, String eventName, ByteBufHolder msg) {
-        String chStr = ctx.channel().toString();
+    protected String formatNonByteBuf(String eventName, Object msg) {
+        return eventName + ": " + msg;
+    }
+
+    /**
+     * Returns a String which contains all details to log the {@link ByteBufHolder}.
+     *
+     * By default this method just delegates to {@link #formatByteBuf(String, ByteBuf)},
+     * using the content of the {@link ByteBufHolder}. Sub-classes may override this.
+     */
+    protected String formatByteBufHolder(String eventName, ByteBufHolder msg) {
         String msgStr = msg.toString();
         ByteBuf content = msg.content();
         int length = content.readableBytes();
         if (length == 0) {
-            StringBuilder buf = new StringBuilder(chStr.length() + 1 + eventName.length() + 2 + msgStr.length() + 4);
-            buf.append(chStr).append(' ').append(eventName).append(", ").append(msgStr).append(", 0B");
+            StringBuilder buf = new StringBuilder(eventName.length() + 2 + msgStr.length() + 4);
+            buf.append(eventName).append(", ").append(msgStr).append(", 0B");
             return buf.toString();
         } else {
-            int outputLength = chStr.length() + 1 + eventName.length() + 2 + msgStr.length() + 2 + 10 + 1;
-            if (byteBufFormat == ByteBufFormat.HEX_DUMP) {
-                int rows = length / 16 + (length % 15 == 0? 0 : 1) + 4;
-                int hexDumpLength = 2 + rows * 80;
-                outputLength += hexDumpLength;
-            }
-            StringBuilder buf = new StringBuilder(outputLength);
-            buf.append(chStr).append(' ').append(eventName).append(": ")
-               .append(msgStr).append(", ").append(length).append('B');
-            if (byteBufFormat == ByteBufFormat.HEX_DUMP) {
-                buf.append(NEWLINE);
-                appendPrettyHexDump(buf, content);
-            }
+            int rows = length / 16 + (length % 15 == 0? 0 : 1) + 4;
+            StringBuilder buf = new StringBuilder(
+                    eventName.length() + 2 + msgStr.length() + 2 + 10 + 1 + 2 + rows * 80);
+
+            buf.append(eventName).append(": ")
+               .append(msgStr).append(", ").append(length).append('B').append(NEWLINE);
+            appendPrettyHexDump(buf, content);
 
             return buf.toString();
         }
     }
-
-    /**
-     * Generates the default log message of the specified event whose argument is an arbitrary object.
-     */
-    private static String formatSimple(ChannelHandlerContext ctx, String eventName, Object msg) {
-        String chStr = ctx.channel().toString();
-        String msgStr = String.valueOf(msg);
-        StringBuilder buf = new StringBuilder(chStr.length() + 1 + eventName.length() + 2 + msgStr.length());
-        return buf.append(chStr).append(' ').append(eventName).append(": ").append(msgStr).toString();
-    }
 }
+

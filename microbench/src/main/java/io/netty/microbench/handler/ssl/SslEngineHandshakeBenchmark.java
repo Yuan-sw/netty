@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,8 +15,6 @@
  */
 package io.netty.microbench.handler.ssl;
 
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.PooledByteBufAllocator;
 import org.openjdk.jmh.annotations.Benchmark;
 import org.openjdk.jmh.annotations.BenchmarkMode;
 import org.openjdk.jmh.annotations.Level;
@@ -34,13 +32,10 @@ import java.util.concurrent.TimeUnit;
 @Threads(1)
 public class SslEngineHandshakeBenchmark extends AbstractSslEngineBenchmark {
 
-    private ByteBufAllocator allocator;
-
     @Setup(Level.Iteration)
     public void setup() {
-        allocator = new PooledByteBufAllocator(true);
         // Init an engine one time and create the buffers needed for an handshake so we can use them in the benchmark
-        initEngines(allocator);
+        initEngines();
         initHandshakeBuffers();
         destroyEngines();
     }
@@ -54,7 +49,7 @@ public class SslEngineHandshakeBenchmark extends AbstractSslEngineBenchmark {
     @BenchmarkMode(Mode.AverageTime)
     @OutputTimeUnit(TimeUnit.MICROSECONDS)
     public boolean handshake() throws Exception {
-        initEngines(allocator);
+        initEngines();
         boolean ok = doHandshake();
         destroyEngines();
         assert ok;

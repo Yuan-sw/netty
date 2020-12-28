@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,6 +29,7 @@ import io.netty.channel.ConnectTimeoutException;
 import io.netty.channel.EventLoop;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
+import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
@@ -50,16 +51,14 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     private static final InternalLogger logger =
             InternalLoggerFactory.getInstance(AbstractNioChannel.class);
 
+    private static final ClosedChannelException DO_CLOSE_CLOSED_CHANNEL_EXCEPTION = ThrowableUtil.unknownStackTrace(
+            new ClosedChannelException(), AbstractNioChannel.class, "doClose()");
+
     private final SelectableChannel ch;
     protected final int readInterestOp;
     volatile SelectionKey selectionKey;
-    boolean readPending;
-    private final Runnable clearReadPendingRunnable = new Runnable() {
-        @Override
-        public void run() {
-            clearReadPending0();
-        }
-    };
+    private volatile boolean inputShutdown;
+    private volatile boolean readPending;
 
     /**
      * The future of the current connection attempt.  If not null, subsequent
@@ -86,8 +85,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             try {
                 ch.close();
             } catch (IOException e2) {
-                logger.warn(
+                if (logger.isWarnEnabled()) {
+                    logger.warn(
                             "Failed to close a partially initialized socket.", e2);
+                }
             }
 
             throw new ChannelException("Failed to enter non-blocking mode.", e);
@@ -121,70 +122,26 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         return selectionKey;
     }
 
-    /**
-     * @deprecated No longer supported.
-     * No longer supported.
-     */
-    @Deprecated
     protected boolean isReadPending() {
         return readPending;
     }
 
-    /**
-     * @deprecated Use {@link #clearReadPending()} if appropriate instead.
-     * No longer supported.
-     */
-    @Deprecated
-    protected void setReadPending(final boolean readPending) {
-        if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
-            if (eventLoop.inEventLoop()) {
-                setReadPending0(readPending);
-            } else {
-                eventLoop.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        setReadPending0(readPending);
-                    }
-                });
-            }
-        } else {
-            // Best effort if we are not registered yet clear readPending.
-            // NB: We only set the boolean field instead of calling clearReadPending0(), because the SelectionKey is
-            // not set yet so it would produce an assertion failure.
-            this.readPending = readPending;
-        }
-    }
-
-    /**
-     * Set read pending to {@code false}.
-     */
-    protected final void clearReadPending() {
-        if (isRegistered()) {
-            EventLoop eventLoop = eventLoop();
-            if (eventLoop.inEventLoop()) {
-                clearReadPending0();
-            } else {
-                eventLoop.execute(clearReadPendingRunnable);
-            }
-        } else {
-            // Best effort if we are not registered yet clear readPending. This happens during channel initialization.
-            // NB: We only set the boolean field instead of calling clearReadPending0(), because the SelectionKey is
-            // not set yet so it would produce an assertion failure.
-            readPending = false;
-        }
-    }
-
-    private void setReadPending0(boolean readPending) {
+    protected void setReadPending(boolean readPending) {
         this.readPending = readPending;
-        if (!readPending) {
-            ((AbstractNioUnsafe) unsafe()).removeReadOp();
-        }
     }
 
-    private void clearReadPending0() {
-        readPending = false;
-        ((AbstractNioUnsafe) unsafe()).removeReadOp();
+    /**
+     * Return {@code true} if the input of this {@link Channel} is shutdown
+     */
+    protected boolean isInputShutdown() {
+        return inputShutdown;
+    }
+
+    /**
+     * Shutdown the input of this {@link Channel}.
+     */
+    void setInputShutdown() {
+        inputShutdown = true;
     }
 
     /**
@@ -258,9 +215,9 @@ public abstract class AbstractNioChannel extends AbstractChannel {
                             @Override
                             public void run() {
                                 ChannelPromise connectPromise = AbstractNioChannel.this.connectPromise;
-                                if (connectPromise != null && !connectPromise.isDone()
-                                        && connectPromise.tryFailure(new ConnectTimeoutException(
-                                                "connection timed out: " + remoteAddress))) {
+                                ConnectTimeoutException cause =
+                                        new ConnectTimeoutException("connection timed out: " + remoteAddress);
+                                if (connectPromise != null && connectPromise.tryFailure(cause)) {
                                     close(voidPromise());
                                 }
                             }
@@ -350,9 +307,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
             // Flush immediately only when there's no pending flush.
             // If there's a pending flush operation, event loop will call forceFlush() later,
             // and thus there's no need to call it now.
-            if (!isFlushPending()) {
-                super.flush0();
+            if (isFlushPending()) {
+                return;
             }
+            super.flush0();
         }
 
         @Override
@@ -402,6 +360,10 @@ public abstract class AbstractNioChannel extends AbstractChannel {
     @Override
     protected void doBeginRead() throws Exception {
         // Channel.read() or ChannelHandlerContext.read() was called
+        if (inputShutdown) {
+            return;
+        }
+
         final SelectionKey selectionKey = this.selectionKey;
         if (!selectionKey.isValid()) {
             return;
@@ -499,7 +461,7 @@ public abstract class AbstractNioChannel extends AbstractChannel {
         ChannelPromise promise = connectPromise;
         if (promise != null) {
             // Use tryFailure() instead of setFailure() to avoid the race against cancel().
-            promise.tryFailure(new ClosedChannelException());
+            promise.tryFailure(DO_CLOSE_CLOSED_CHANNEL_EXCEPTION);
             connectPromise = null;
         }
 

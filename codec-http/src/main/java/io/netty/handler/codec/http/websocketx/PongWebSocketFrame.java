@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 /**
- * Web Socket frame containing binary data.
+ * Web Socket frame containing binary data
  */
 public class PongWebSocketFrame extends WebSocketFrame {
 
@@ -56,22 +56,12 @@ public class PongWebSocketFrame extends WebSocketFrame {
 
     @Override
     public PongWebSocketFrame copy() {
-        return (PongWebSocketFrame) super.copy();
+        return new PongWebSocketFrame(isFinalFragment(), rsv(), content().copy());
     }
 
     @Override
     public PongWebSocketFrame duplicate() {
-        return (PongWebSocketFrame) super.duplicate();
-    }
-
-    @Override
-    public PongWebSocketFrame retainedDuplicate() {
-        return (PongWebSocketFrame) super.retainedDuplicate();
-    }
-
-    @Override
-    public PongWebSocketFrame replace(ByteBuf content) {
-        return new PongWebSocketFrame(isFinalFragment(), rsv(), content);
+        return new PongWebSocketFrame(isFinalFragment(), rsv(), content().duplicate());
     }
 
     @Override
@@ -83,18 +73,6 @@ public class PongWebSocketFrame extends WebSocketFrame {
     @Override
     public PongWebSocketFrame retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public PongWebSocketFrame touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public PongWebSocketFrame touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

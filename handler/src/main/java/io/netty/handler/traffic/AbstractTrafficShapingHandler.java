@@ -1,12 +1,9 @@
 /*
  * Copyright 2011 The Netty Project
- *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
- *
- * https://www.apache.org/licenses/LICENSE-2.0
- *
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -17,13 +14,11 @@ package io.netty.handler.traffic;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.FileRegion;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.internal.logging.InternalLogger;
@@ -43,23 +38,23 @@ import java.util.concurrent.TimeUnit;
  * the read/write limit or the check interval, several methods allow that for you:</p>
  * <ul>
  * <li><tt>configure</tt> allows you to change read or write limits, or the checkInterval</li>
- * <li><tt>getTrafficCounter</tt> allows you to have access to the TrafficCounter and so to stop
- * or start the monitoring, to change the checkInterval directly, or to have access to its values.</li>
+ * <li><tt>getTrafficCounter</tt> allows you to have access to the TrafficCounter and so to stop or start the
+ * monitoring, to change the checkInterval directly, or to have access to its values.</li>
  * </ul>
  */
 public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler {
-    private static final InternalLogger logger =
-            InternalLoggerFactory.getInstance(AbstractTrafficShapingHandler.class);
+    private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractTrafficShapingHandler.class);
+
     /**
      * Default delay between two checks: 1s
      */
     public static final long DEFAULT_CHECK_INTERVAL = 1000;
 
-   /**
-    * Default max delay in case of traffic shaping
-    * (during which no communication will occur).
-    * Shall be less than TIMEOUT. Here half of "standard" 30s
-    */
+    /**
+     * Default max delay in case of traffic shaping
+     * (during which no communication will occur).
+     * Shall be less than TIMEOUT. Here half of "standard" 30s
+     */
     public static final long DEFAULT_MAX_TIME = 15000;
 
     /**
@@ -68,7 +63,7 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
     static final long DEFAULT_MAX_SIZE = 4 * 1024 * 1024L;
 
     /**
-     * Default minimal time to wait: 10ms
+     * Default minimal time to wait
      */
     static final long MINIMAL_WAIT = 10;
 
@@ -153,9 +148,9 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
 
     /**
      * @param writeLimit
-     *          0 or a limit in bytes/s
+     *            0 or a limit in bytes/s
      * @param readLimit
-     *          0 or a limit in bytes/s
+     *            0 or a limit in bytes/s
      * @param checkInterval
      *            The delay between two computations of performances for
      *            channels or 0 if no stats are to be computed.
@@ -194,9 +189,9 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
      * default max time as delay allowed value of {@value #DEFAULT_MAX_TIME} ms.
      *
      * @param writeLimit
-     *          0 or a limit in bytes/s
+     *            0 or a limit in bytes/s
      * @param readLimit
-     *          0 or a limit in bytes/s
+     *            0 or a limit in bytes/s
      */
     protected AbstractTrafficShapingHandler(long writeLimit, long readLimit) {
         this(writeLimit, readLimit, DEFAULT_CHECK_INTERVAL, DEFAULT_MAX_TIME);
@@ -230,12 +225,14 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
      * <p>So the expected usage of this method is to be used not too often,
      * accordingly to the traffic shaping configuration.</p>
      *
-     * @param newWriteLimit The new write limit (in bytes)
-     * @param newReadLimit The new read limit (in bytes)
-     * @param newCheckInterval The new check interval (in milliseconds)
+     * @param newWriteLimit
+     *            The new write limit (in bytes)
+     * @param newReadLimit
+     *            The new read limit (in bytes)
+     * @param newCheckInterval
+     *            The new check interval (in milliseconds)
      */
-    public void configure(long newWriteLimit, long newReadLimit,
-            long newCheckInterval) {
+    public void configure(long newWriteLimit, long newReadLimit, long newCheckInterval) {
         configure(newWriteLimit, newReadLimit);
         configure(newCheckInterval);
     }
@@ -248,8 +245,10 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
      * <p>So the expected usage of this method is to be used not too often,
      * accordingly to the traffic shaping configuration.</p>
      *
-     * @param newWriteLimit The new write limit (in bytes)
-     * @param newReadLimit The new read limit (in bytes)
+     * @param newWriteLimit
+     *            The new write limit (in bytes)
+     * @param newReadLimit
+     *            The new read limit (in bytes)
      */
     public void configure(long newWriteLimit, long newReadLimit) {
         writeLimit = newWriteLimit;
@@ -262,7 +261,8 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
     /**
      * Change the check interval.
      *
-     * @param newCheckInterval The new check interval (in milliseconds)
+     * @param newCheckInterval
+     *            The new check interval (in milliseconds)
      */
     public void configure(long newCheckInterval) {
         checkInterval = newCheckInterval;
@@ -422,14 +422,14 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
      */
     static final class ReopenReadTimerTask implements Runnable {
         final ChannelHandlerContext ctx;
+
         ReopenReadTimerTask(ChannelHandlerContext ctx) {
             this.ctx = ctx;
         }
 
         @Override
         public void run() {
-            Channel channel = ctx.channel();
-            ChannelConfig config = channel.config();
+            ChannelConfig config = ctx.channel().config();
             if (!config.isAutoRead() && isHandlerActive(ctx)) {
                 // If AutoRead is False and Active is True, user make a direct setAutoRead(false)
                 // Then Just reset the status
@@ -437,25 +437,21 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
                     logger.debug("Not unsuspend: " + config.isAutoRead() + ':' +
                             isHandlerActive(ctx));
                 }
-                channel.attr(READ_SUSPENDED).set(false);
+                ctx.attr(READ_SUSPENDED).set(false);
             } else {
                 // Anything else allows the handler to reset the AutoRead
                 if (logger.isDebugEnabled()) {
                     if (config.isAutoRead() && !isHandlerActive(ctx)) {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("Unsuspend: " + config.isAutoRead() + ':' +
-                                    isHandlerActive(ctx));
-                        }
+                        logger.debug("Unsuspend: " + config.isAutoRead() + ':' +
+                                isHandlerActive(ctx));
                     } else {
-                        if (logger.isDebugEnabled()) {
-                            logger.debug("Normal unsuspend: " + config.isAutoRead() + ':'
-                                    + isHandlerActive(ctx));
-                        }
+                        logger.debug("Normal unsuspend: " + config.isAutoRead() + ':'
+                                + isHandlerActive(ctx));
                     }
                 }
-                channel.attr(READ_SUSPENDED).set(false);
+                ctx.attr(READ_SUSPENDED).set(false);
                 config.setAutoRead(true);
-                channel.read();
+                ctx.channel().read();
             }
             if (logger.isDebugEnabled()) {
                 logger.debug("Unsuspend final status => " + config.isAutoRead() + ':'
@@ -468,9 +464,8 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
      * Release the Read suspension
      */
     void releaseReadSuspended(ChannelHandlerContext ctx) {
-        Channel channel = ctx.channel();
-        channel.attr(READ_SUSPENDED).set(false);
-        channel.config().setAutoRead(true);
+        ctx.attr(READ_SUSPENDED).set(false);
+        ctx.channel().config().setAutoRead(true);
     }
 
     @Override
@@ -484,18 +479,17 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
             if (wait >= MINIMAL_WAIT) { // At least 10ms seems a minimal
                 // time in order to try to limit the traffic
                 // Only AutoRead AND HandlerActive True means Context Active
-                Channel channel = ctx.channel();
-                ChannelConfig config = channel.config();
+                ChannelConfig config = ctx.channel().config();
                 if (logger.isDebugEnabled()) {
                     logger.debug("Read suspend: " + wait + ':' + config.isAutoRead() + ':'
                             + isHandlerActive(ctx));
                 }
                 if (config.isAutoRead() && isHandlerActive(ctx)) {
                     config.setAutoRead(false);
-                    channel.attr(READ_SUSPENDED).set(true);
+                    ctx.attr(READ_SUSPENDED).set(true);
                     // Create a Runnable to reactive the read if needed. If one was create before it will just be
                     // reused to limit object creation
-                    Attribute<Runnable> attr = channel.attr(REOPEN_TASK);
+                    Attribute<Runnable> attr = ctx.attr(REOPEN_TASK);
                     Runnable reopenTask = attr.get();
                     if (reopenTask == null) {
                         reopenTask = new ReopenReadTimerTask(ctx);
@@ -511,16 +505,6 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
         }
         informReadOperation(ctx, now);
         ctx.fireChannelRead(msg);
-    }
-
-    @Override
-    public void handlerRemoved(ChannelHandlerContext ctx) throws Exception {
-        Channel channel = ctx.channel();
-        if (channel.hasAttr(REOPEN_TASK)) {
-            //release the reopen task
-            channel.attr(REOPEN_TASK).set(null);
-        }
-        super.handlerRemoved(ctx);
     }
 
     /**
@@ -543,7 +527,7 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
     }
 
     protected static boolean isHandlerActive(ChannelHandlerContext ctx) {
-        Boolean suspended = ctx.channel().attr(READ_SUSPENDED).get();
+        Boolean suspended = ctx.attr(READ_SUSPENDED).get();
         return suspended == null || Boolean.FALSE.equals(suspended);
     }
 
@@ -645,9 +629,10 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
     /**
      * Calculate the size of the given {@link Object}.
      *
-     * This implementation supports {@link ByteBuf}, {@link ByteBufHolder} and {@link FileRegion}.
-     * Sub-classes may override this.
-     * @param msg the msg for which the size should be calculated.
+     * This implementation supports {@link ByteBuf} and {@link ByteBufHolder}. Sub-classes may override this.
+     *
+     * @param msg
+     *            the msg for which the size should be calculated.
      * @return size the size of the msg or {@code -1} if unknown.
      */
     protected long calculateSize(Object msg) {
@@ -656,9 +641,6 @@ public abstract class AbstractTrafficShapingHandler extends ChannelDuplexHandler
         }
         if (msg instanceof ByteBufHolder) {
             return ((ByteBufHolder) msg).content().readableBytes();
-        }
-        if (msg instanceof FileRegion) {
-            return ((FileRegion) msg).count();
         }
         return -1;
     }

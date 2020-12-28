@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,9 +16,7 @@
 package io.netty.handler.codec.compression;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.List;
 import java.util.zip.CRC32;
@@ -40,7 +38,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
     private final byte[] dictionary;
 
     // GZIP related
-    private final ByteBufChecksum crc;
+    private final CRC32 crc;
     private final boolean decompressConcatenated;
 
     private enum GzipState {
@@ -66,19 +64,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
      * Creates a new instance with the default wrapper ({@link ZlibWrapper#ZLIB}).
      */
     public JdkZlibDecoder() {
-        this(ZlibWrapper.ZLIB, null, false, 0);
-    }
-
-    /**
-     * Creates a new instance with the default wrapper ({@link ZlibWrapper#ZLIB})
-     * and the specified maximum buffer allocation.
-     *
-     * @param maxAllocation
-     *          Maximum size of the decompression buffer. Must be &gt;= 0.
-     *          If zero, maximum size is decided by the {@link ByteBufAllocator}.
-     */
-    public JdkZlibDecoder(int maxAllocation) {
-        this(ZlibWrapper.ZLIB, null, false, maxAllocation);
+        this(ZlibWrapper.ZLIB, null, false);
     }
 
     /**
@@ -87,20 +73,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
      * supports the preset dictionary.
      */
     public JdkZlibDecoder(byte[] dictionary) {
-        this(ZlibWrapper.ZLIB, dictionary, false, 0);
-    }
-
-    /**
-     * Creates a new instance with the specified preset dictionary and maximum buffer allocation.
-     * The wrapper is always {@link ZlibWrapper#ZLIB} because it is the only format that
-     * supports the preset dictionary.
-     *
-     * @param maxAllocation
-     *          Maximum size of the decompression buffer. Must be &gt;= 0.
-     *          If zero, maximum size is decided by the {@link ByteBufAllocator}.
-     */
-    public JdkZlibDecoder(byte[] dictionary, int maxAllocation) {
-        this(ZlibWrapper.ZLIB, dictionary, false, maxAllocation);
+        this(ZlibWrapper.ZLIB, dictionary, false);
     }
 
     /**
@@ -109,48 +82,26 @@ public class JdkZlibDecoder extends ZlibDecoder {
      * supported atm.
      */
     public JdkZlibDecoder(ZlibWrapper wrapper) {
-        this(wrapper, null, false, 0);
-    }
-
-    /**
-     * Creates a new instance with the specified wrapper and maximum buffer allocation.
-     * Be aware that only {@link ZlibWrapper#GZIP}, {@link ZlibWrapper#ZLIB} and {@link ZlibWrapper#NONE} are
-     * supported atm.
-     *
-     * @param maxAllocation
-     *          Maximum size of the decompression buffer. Must be &gt;= 0.
-     *          If zero, maximum size is decided by the {@link ByteBufAllocator}.
-     */
-    public JdkZlibDecoder(ZlibWrapper wrapper, int maxAllocation) {
-        this(wrapper, null, false, maxAllocation);
+        this(wrapper, null, false);
     }
 
     public JdkZlibDecoder(ZlibWrapper wrapper, boolean decompressConcatenated) {
-        this(wrapper, null, decompressConcatenated, 0);
-    }
-
-    public JdkZlibDecoder(ZlibWrapper wrapper, boolean decompressConcatenated, int maxAllocation) {
-        this(wrapper, null, decompressConcatenated, maxAllocation);
+        this(wrapper, null, decompressConcatenated);
     }
 
     public JdkZlibDecoder(boolean decompressConcatenated) {
-        this(ZlibWrapper.GZIP, null, decompressConcatenated, 0);
+        this(ZlibWrapper.GZIP, null, decompressConcatenated);
     }
 
-    public JdkZlibDecoder(boolean decompressConcatenated, int maxAllocation) {
-        this(ZlibWrapper.GZIP, null, decompressConcatenated, maxAllocation);
-    }
-
-    private JdkZlibDecoder(ZlibWrapper wrapper, byte[] dictionary, boolean decompressConcatenated, int maxAllocation) {
-        super(maxAllocation);
-
-        ObjectUtil.checkNotNull(wrapper, "wrapper");
-
+    private JdkZlibDecoder(ZlibWrapper wrapper, byte[] dictionary, boolean decompressConcatenated) {
+        if (wrapper == null) {
+            throw new NullPointerException("wrapper");
+        }
         this.decompressConcatenated = decompressConcatenated;
         switch (wrapper) {
             case GZIP:
                 inflater = new Inflater(true);
-                crc = ByteBufChecksum.wrapChecksum(new CRC32());
+                crc = new CRC32();
                 break;
             case NONE:
                 inflater = new Inflater(true);
@@ -226,7 +177,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
             inflater.setInput(array);
         }
 
-        ByteBuf decompressed = prepareDecompressBuffer(ctx, null, inflater.getRemaining() << 1);
+        ByteBuf decompressed = ctx.alloc().heapBuffer(inflater.getRemaining() << 1);
         try {
             boolean readFooter = false;
             while (!inflater.needsInput()) {
@@ -257,7 +208,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
                     }
                     break;
                 } else {
-                    decompressed = prepareDecompressBuffer(ctx, decompressed, inflater.getRemaining() << 1);
+                    decompressed.ensureWritable(inflater.getRemaining() << 1);
                 }
             }
 
@@ -285,11 +236,6 @@ public class JdkZlibDecoder extends ZlibDecoder {
                 decompressed.release();
             }
         }
-    }
-
-    @Override
-    protected void decompressionBufferExhausted(ByteBuf buffer) {
-        finished = true;
     }
 
     @Override
@@ -332,8 +278,10 @@ public class JdkZlibDecoder extends ZlibDecoder {
                 }
 
                 // mtime (int)
-                crc.update(in, in.readerIndex(), 4);
-                in.skipBytes(4);
+                crc.update(in.readByte());
+                crc.update(in.readByte());
+                crc.update(in.readByte());
+                crc.update(in.readByte());
 
                 crc.update(in.readUnsignedByte()); // extra flags
                 crc.update(in.readUnsignedByte()); // operating system
@@ -359,8 +307,9 @@ public class JdkZlibDecoder extends ZlibDecoder {
                     if (in.readableBytes() < xlen) {
                         return false;
                     }
-                    crc.update(in, in.readerIndex(), xlen);
-                    in.skipBytes(xlen);
+                    byte[] xtra = new byte[xlen];
+                    in.readBytes(xtra);
+                    crc.update(xtra);
                 }
                 gzipState = GzipState.SKIP_FNAME;
                 // fall through
@@ -448,7 +397,7 @@ public class JdkZlibDecoder extends ZlibDecoder {
      * indicates that this is a zlib stream.
      * <p>
      * You can lookup the details in the ZLIB RFC:
-     * <a href="https://tools.ietf.org/html/rfc1950#section-2.2">RFC 1950</a>.
+     * <a href="http://tools.ietf.org/html/rfc1950#section-2.2">RFC 1950</a>.
      */
     private static boolean looksLikeZlib(short cmf_flg) {
         return (cmf_flg & 0x7800) == 0x7800 &&

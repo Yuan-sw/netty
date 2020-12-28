@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,6 +29,15 @@ import java.util.List;
  * Before returning SocksRequest decoder removes itself from pipeline.
  */
 public class SocksInitRequestDecoder extends ReplayingDecoder<State> {
+    private static final String name = "SOCKS_INIT_REQUEST_DECODER";
+
+    /**
+     * @deprecated Will be removed at the next minor version bump.
+     */
+    @Deprecated
+    public static String getName() {
+        return name;
+    }
 
     public SocksInitRequestDecoder() {
         super(State.CHECK_PROTOCOL_VERSION);

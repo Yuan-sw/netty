@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,24 +16,29 @@
 package io.netty.handler.codec;
 
 import io.netty.util.Signal;
-import io.netty.util.internal.ObjectUtil;
 
 public class DecoderResult {
 
-    protected static final Signal SIGNAL_UNFINISHED = Signal.valueOf(DecoderResult.class, "UNFINISHED");
-    protected static final Signal SIGNAL_SUCCESS = Signal.valueOf(DecoderResult.class, "SUCCESS");
+    protected static final Signal SIGNAL_UNFINISHED = Signal.valueOf(DecoderResult.class.getName() + ".UNFINISHED");
+    protected static final Signal SIGNAL_SUCCESS = Signal.valueOf(DecoderResult.class.getName() + ".SUCCESS");
 
     public static final DecoderResult UNFINISHED = new DecoderResult(SIGNAL_UNFINISHED);
     public static final DecoderResult SUCCESS = new DecoderResult(SIGNAL_SUCCESS);
 
     public static DecoderResult failure(Throwable cause) {
-        return new DecoderResult(ObjectUtil.checkNotNull(cause, "cause"));
+        if (cause == null) {
+            throw new NullPointerException("cause");
+        }
+        return new DecoderResult(cause);
     }
 
     private final Throwable cause;
 
     protected DecoderResult(Throwable cause) {
-        this.cause = ObjectUtil.checkNotNull(cause, "cause");
+        if (cause == null) {
+            throw new NullPointerException("cause");
+        }
+        this.cause = cause;
     }
 
     public boolean isFinished() {

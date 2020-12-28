@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -104,46 +104,10 @@ public class WrappedUnpooledUnsafeByteBufTest extends BigEndianUnsafeDirectByteB
         super.testReadBytes();
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    @Override
-    public void testDuplicateCapacityChange() {
-        super.testDuplicateCapacityChange();
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    @Override
-    public void testRetainedDuplicateCapacityChange() {
-        super.testRetainedDuplicateCapacityChange();
-    }
-
     @Test(expected = IndexOutOfBoundsException.class)
     @Override
     public void testLittleEndianWithExpand() {
         super.testLittleEndianWithExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUsAsciiCharSequenceExpand() {
-        super.testWriteUsAsciiCharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUtf8CharSequenceExpand() {
-        super.testWriteUtf8CharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteIso88591CharSequenceExpand() {
-        super.testWriteIso88591CharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUtf16CharSequenceExpand() {
-        super.testWriteUtf16CharSequenceExpand();
     }
 
     @Test

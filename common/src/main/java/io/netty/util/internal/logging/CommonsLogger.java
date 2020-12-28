@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -39,11 +39,10 @@
  */
 package io.netty.util.internal.logging;
 
-import io.netty.util.internal.ObjectUtil;
 import org.apache.commons.logging.Log;
 
 /**
- * <a href="https://commons.apache.org/logging/">Apache Commons Logging</a>
+ * <a href="http://commons.apache.org/logging/">Apache Commons Logging</a>
  * logger.
  *
  * @deprecated Please use {@link Log4J2Logger} or {@link Log4JLogger} or
@@ -58,7 +57,10 @@ class CommonsLogger extends AbstractInternalLogger {
 
     CommonsLogger(Log logger, String name) {
         super(name);
-        this.logger = ObjectUtil.checkNotNull(logger, "logger");
+        if (logger == null) {
+            throw new NullPointerException("logger");
+        }
+        this.logger = logger;
     }
 
     /**

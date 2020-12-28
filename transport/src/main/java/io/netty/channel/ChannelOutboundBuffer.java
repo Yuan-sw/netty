@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,13 +19,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufHolder;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.util.Recycler;
+import io.netty.util.Recycler.Handle;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.FastThreadLocal;
 import io.netty.util.internal.InternalThreadLocalMap;
-import io.netty.util.internal.ObjectPool;
-import io.netty.util.internal.ObjectPool.Handle;
-import io.netty.util.internal.ObjectPool.ObjectCreator;
-import io.netty.util.internal.ObjectUtil;
+import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.PromiseNotificationUtil;
 import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.logging.InternalLogger;
@@ -36,8 +35,6 @@ import java.nio.channels.ClosedChannelException;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicIntegerFieldUpdater;
 import java.util.concurrent.atomic.AtomicLongFieldUpdater;
-
-import static java.lang.Math.min;
 
 /**
  * (Transport implementors only) an internal data structure used by {@link AbstractChannel} to store its pending
@@ -54,7 +51,7 @@ import static java.lang.Math.min;
 public final class ChannelOutboundBuffer {
     // Assuming a 64-bit JVM:
     //  - 16 bytes object header
-    //  - 6 reference fields
+    //  - 8 reference fields
     //  - 2 long fields
     //  - 2 int fields
     //  - 1 boolean field
@@ -115,11 +112,12 @@ public final class ChannelOutboundBuffer {
         Entry entry = Entry.newInstance(msg, size, total(msg), promise);
         if (tailEntry == null) {
             flushedEntry = null;
+            tailEntry = entry;
         } else {
             Entry tail = tailEntry;
             tail.next = entry;
+            tailEntry = entry;
         }
-        tailEntry = entry;
         if (unflushedEntry == null) {
             unflushedEntry = entry;
         }
@@ -223,27 +221,15 @@ public final class ChannelOutboundBuffer {
     }
 
     /**
-     * Return the current message flush progress.
-     * @return {@code 0} if nothing was flushed before for the current message or there is no current message
-     */
-    public long currentProgress() {
-        Entry entry = flushedEntry;
-        if (entry == null) {
-            return 0;
-        }
-        return entry.progress;
-    }
-
-    /**
      * Notify the {@link ChannelPromise} of the current message about writing progress.
      */
     public void progress(long amount) {
         Entry e = flushedEntry;
         assert e != null;
         ChannelPromise p = e.promise;
-        long progress = e.progress + amount;
-        e.progress = progress;
         if (p instanceof ChannelProgressivePromise) {
+            long progress = e.progress + amount;
+            e.progress = progress;
             ((ChannelProgressivePromise) p).tryProgress(progress, e.total);
         }
     }
@@ -382,26 +368,6 @@ public final class ChannelOutboundBuffer {
      * </p>
      */
     public ByteBuffer[] nioBuffers() {
-        return nioBuffers(Integer.MAX_VALUE, Integer.MAX_VALUE);
-    }
-
-    /**
-     * Returns an array of direct NIO buffers if the currently pending messages are made of {@link ByteBuf} only.
-     * {@link #nioBufferCount()} and {@link #nioBufferSize()} will return the number of NIO buffers in the returned
-     * array and the total number of readable bytes of the NIO buffers respectively.
-     * <p>
-     * Note that the returned array is reused and thus should not escape
-     * {@link AbstractChannel#doWrite(ChannelOutboundBuffer)}.
-     * Refer to {@link NioSocketChannel#doWrite(ChannelOutboundBuffer)} for an example.
-     * </p>
-     * @param maxCount The maximum amount of buffers that will be added to the return value.
-     * @param maxBytes A hint toward the maximum number of bytes to include as part of the return value. Note that this
-     *                 value maybe exceeded because we make a best effort to include at least 1 {@link ByteBuffer}
-     *                 in the return value to ensure write progress is made.
-     */
-    public ByteBuffer[] nioBuffers(int maxCount, long maxBytes) {
-        assert maxCount > 0;
-        assert maxBytes > 0;
         long nioBufferSize = 0;
         int nioBufferCount = 0;
         final InternalThreadLocalMap threadLocalMap = InternalThreadLocalMap.get();
@@ -414,27 +380,26 @@ public final class ChannelOutboundBuffer {
                 final int readableBytes = buf.writerIndex() - readerIndex;
 
                 if (readableBytes > 0) {
-                    if (maxBytes - readableBytes < nioBufferSize && nioBufferCount != 0) {
-                        // If the nioBufferSize + readableBytes will overflow maxBytes, and there is at least one entry
-                        // we stop populate the ByteBuffer array. This is done for 2 reasons:
-                        // 1. bsd/osx don't allow to write more bytes then Integer.MAX_VALUE with one writev(...) call
-                        // and so will return 'EINVAL', which will raise an IOException. On Linux it may work depending
-                        // on the architecture and kernel but to be safe we also enforce the limit here.
-                        // 2. There is no sense in putting more data in the array than is likely to be accepted by the
-                        // OS.
+                    if (Integer.MAX_VALUE - readableBytes < nioBufferSize) {
+                        // If the nioBufferSize + readableBytes will overflow an Integer we stop populate the
+                        // ByteBuffer array. This is done as bsd/osx don't allow to write more bytes then
+                        // Integer.MAX_VALUE with one writev(...) call and so will return 'EINVAL', which will
+                        // raise an IOException. On Linux it may work depending on the
+                        // architecture and kernel but to be safe we also enforce the limit here.
+                        // This said writing more the Integer.MAX_VALUE is not a good idea anyway.
                         //
                         // See also:
                         // - https://www.freebsd.org/cgi/man.cgi?query=write&sektion=2
-                        // - https://linux.die.net//man/2/writev
+                        // - http://linux.die.net/man/2/writev
                         break;
                     }
                     nioBufferSize += readableBytes;
                     int count = entry.count;
                     if (count == -1) {
                         //noinspection ConstantValueVariableUse
-                        entry.count = count = buf.nioBufferCount();
+                        entry.count = count =  buf.nioBufferCount();
                     }
-                    int neededSpace = min(maxCount, nioBufferCount + count);
+                    int neededSpace = nioBufferCount + count;
                     if (neededSpace > nioBuffers.length) {
                         nioBuffers = expandNioBufferArray(nioBuffers, neededSpace, nioBufferCount);
                         NIO_BUFFERS.set(threadLocalMap, nioBuffers);
@@ -446,14 +411,15 @@ public final class ChannelOutboundBuffer {
                             // derived buffer
                             entry.buf = nioBuf = buf.internalNioBuffer(readerIndex, readableBytes);
                         }
-                        nioBuffers[nioBufferCount++] = nioBuf;
+                        nioBuffers[nioBufferCount ++] = nioBuf;
                     } else {
-                        // The code exists in an extra method to ensure the method is not too big to inline as this
-                        // branch is not very likely to get hit very frequently.
-                        nioBufferCount = nioBuffers(entry, buf, nioBuffers, nioBufferCount, maxCount);
-                    }
-                    if (nioBufferCount >= maxCount) {
-                        break;
+                        ByteBuffer[] nioBufs = entry.bufs;
+                        if (nioBufs == null) {
+                            // cached ByteBuffers as they may be expensive to create in terms
+                            // of Object allocation
+                            entry.bufs = nioBufs = buf.nioBuffers();
+                        }
+                        nioBufferCount = fillBufferArray(nioBufs, nioBuffers, nioBufferCount);
                     }
                 }
             }
@@ -465,21 +431,12 @@ public final class ChannelOutboundBuffer {
         return nioBuffers;
     }
 
-    private static int nioBuffers(Entry entry, ByteBuf buf, ByteBuffer[] nioBuffers, int nioBufferCount, int maxCount) {
-        ByteBuffer[] nioBufs = entry.bufs;
-        if (nioBufs == null) {
-            // cached ByteBuffers as they may be expensive to create in terms
-            // of Object allocation
-            entry.bufs = nioBufs = buf.nioBuffers();
-        }
-        for (int i = 0; i < nioBufs.length && nioBufferCount < maxCount; ++i) {
-            ByteBuffer nioBuf = nioBufs[i];
+    private static int fillBufferArray(ByteBuffer[] nioBufs, ByteBuffer[] nioBuffers, int nioBufferCount) {
+        for (ByteBuffer nioBuf: nioBufs) {
             if (nioBuf == null) {
                 break;
-            } else if (!nioBuf.hasRemaining()) {
-                continue;
             }
-            nioBuffers[nioBufferCount++] = nioBuf;
+            nioBuffers[nioBufferCount ++] = nioBuf;
         }
         return nioBufferCount;
     }
@@ -603,7 +560,7 @@ public final class ChannelOutboundBuffer {
             final int oldValue = unwritable;
             final int newValue = oldValue | 1;
             if (UNWRITABLE_UPDATER.compareAndSet(this, oldValue, newValue)) {
-                if (oldValue == 0) {
+                if (oldValue == 0 && newValue != 0) {
                     fireChannelWritabilityChanged(invokeLater);
                 }
                 break;
@@ -768,7 +725,9 @@ public final class ChannelOutboundBuffer {
      * returns {@code false} or there are no more flushed messages to process.
      */
     public void forEachFlushedMessage(MessageProcessor processor) throws Exception {
-        ObjectUtil.checkNotNull(processor, "processor");
+        if (processor == null) {
+            throw new NullPointerException("processor");
+        }
 
         Entry entry = flushedEntry;
         if (entry == null) {
@@ -798,14 +757,14 @@ public final class ChannelOutboundBuffer {
     }
 
     static final class Entry {
-        private static final ObjectPool<Entry> RECYCLER = ObjectPool.newPool(new ObjectCreator<Entry>() {
+        private static final Recycler<Entry> RECYCLER = new Recycler<Entry>() {
             @Override
-            public Entry newObject(Handle<Entry> handle) {
+            protected Entry newObject(Handle handle) {
                 return new Entry(handle);
             }
-        });
+        };
 
-        private final Handle<Entry> handle;
+        private final Handle handle;
         Entry next;
         Object msg;
         ByteBuffer[] bufs;
@@ -817,7 +776,7 @@ public final class ChannelOutboundBuffer {
         int count = -1;
         boolean cancelled;
 
-        private Entry(Handle<Entry> handle) {
+        private Entry(Handle handle) {
             this.handle = handle;
         }
 
@@ -860,7 +819,7 @@ public final class ChannelOutboundBuffer {
             pendingSize = 0;
             count = -1;
             cancelled = false;
-            handle.recycle(this);
+            RECYCLER.recycle(this, handle);
         }
 
         Entry recycleAndGetNext() {

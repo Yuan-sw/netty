@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -42,7 +42,7 @@ public class LengthFieldBasedFrameDecoderTest {
         }
         Assert.assertTrue(channel.finish());
 
-        ByteBuf b = channel.readInbound();
+        ByteBuf b = (ByteBuf) channel.readInbound();
         Assert.assertEquals(5, b.readableBytes());
         Assert.assertEquals(1, b.readInt());
         Assert.assertEquals('a', b.readByte());
@@ -63,16 +63,16 @@ public class LengthFieldBasedFrameDecoderTest {
         buf.writeByte('a');
         EmbeddedChannel channel = new EmbeddedChannel(new LengthFieldBasedFrameDecoder(16, 0, 4));
         try {
-            channel.writeInbound(buf.readRetainedSlice(14));
+            channel.writeInbound(buf.readSlice(14).retain());
             Assert.fail();
         } catch (TooLongFrameException e) {
             // expected
         }
-        Assert.assertTrue(channel.writeInbound(buf.readRetainedSlice(buf.readableBytes())));
+        Assert.assertTrue(channel.writeInbound(buf.readSlice(buf.readableBytes()).retain()));
 
         Assert.assertTrue(channel.finish());
 
-        ByteBuf b = channel.readInbound();
+        ByteBuf b = (ByteBuf) channel.readInbound();
         Assert.assertEquals(5, b.readableBytes());
         Assert.assertEquals(1, b.readInt());
         Assert.assertEquals('a', b.readByte());

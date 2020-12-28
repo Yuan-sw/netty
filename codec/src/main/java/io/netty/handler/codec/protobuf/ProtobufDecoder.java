@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import com.google.protobuf.ExtensionRegistryLite;
 import com.google.protobuf.Message;
 import com.google.protobuf.MessageLite;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.channel.ChannelHandler.Sharable;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelPipeline;
@@ -28,17 +27,16 @@ import io.netty.handler.codec.ByteToMessageDecoder;
 import io.netty.handler.codec.LengthFieldBasedFrameDecoder;
 import io.netty.handler.codec.LengthFieldPrepender;
 import io.netty.handler.codec.MessageToMessageDecoder;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.List;
 
 /**
  * Decodes a received {@link ByteBuf} into a
  * <a href="https://github.com/google/protobuf">Google Protocol Buffers</a>
- * {@link Message} and {@link MessageLite}. Please note that this decoder must
+ * {@link Message} and {@link MessageLite}.  Please note that this decoder must
  * be used with a proper {@link ByteToMessageDecoder} such as {@link ProtobufVarint32FrameDecoder}
  * or {@link LengthFieldBasedFrameDecoder} if you are using a stream-based
- * transport such as TCP/IP. A typical setup for TCP/IP would be:
+ * transport such as TCP/IP.  A typical setup for TCP/IP would be:
  * <pre>
  * {@link ChannelPipeline} pipeline = ...;
  *
@@ -55,8 +53,7 @@ import java.util.List;
  * and then you can use a {@code MyMessage} instead of a {@link ByteBuf}
  * as a message:
  * <pre>
- * void channelRead({@link ChannelHandlerContext} ctx, Object msg) {
- *     MyMessage req = (MyMessage) msg;
+ * void channelRead({@link ChannelHandlerContext} ctx, MyMessage req) {
  *     MyMessage res = MyMessage.newBuilder().setText(
  *                               "Did you say '" + req.getText() + "'?").build();
  *     ch.write(res);
@@ -96,13 +93,15 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
     }
 
     public ProtobufDecoder(MessageLite prototype, ExtensionRegistryLite extensionRegistry) {
-        this.prototype = ObjectUtil.checkNotNull(prototype, "prototype").getDefaultInstanceForType();
+        if (prototype == null) {
+            throw new NullPointerException("prototype");
+        }
+        this.prototype = prototype.getDefaultInstanceForType();
         this.extensionRegistry = extensionRegistry;
     }
 
     @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out)
-            throws Exception {
+    protected void decode(ChannelHandlerContext ctx, ByteBuf msg, List<Object> out) throws Exception {
         final byte[] array;
         final int offset;
         final int length = msg.readableBytes();
@@ -110,7 +109,8 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
             array = msg.array();
             offset = msg.arrayOffset() + msg.readerIndex();
         } else {
-            array = ByteBufUtil.getBytes(msg, msg.readerIndex(), length, false);
+            array = new byte[length];
+            msg.getBytes(msg.readerIndex(), array, 0, length);
             offset = 0;
         }
 
@@ -122,12 +122,11 @@ public class ProtobufDecoder extends MessageToMessageDecoder<ByteBuf> {
             }
         } else {
             if (HAS_PARSER) {
-                out.add(prototype.getParserForType().parseFrom(
-                        array, offset, length, extensionRegistry));
+                out.add(prototype.getParserForType().parseFrom(array, offset, length, extensionRegistry));
             } else {
-                out.add(prototype.newBuilderForType().mergeFrom(
-                        array, offset, length, extensionRegistry).build());
+                out.add(prototype.newBuilderForType().mergeFrom(array, offset, length, extensionRegistry).build());
             }
         }
     }
 }
+

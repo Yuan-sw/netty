@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,14 +15,11 @@
  */
 package io.netty.buffer;
 
-import io.netty.util.ByteProcessor;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
@@ -99,11 +96,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int maxFastWritableBytes() {
-        return wrapped.maxFastWritableBytes();
-    }
-
-    @Override
     public int ensureWritable(int minWritableBytes, boolean force) {
         return wrapped.ensureWritable(minWritableBytes, force);
     }
@@ -129,18 +121,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public short getShortLE(int index) {
-        return wrapped.getShortLE(index);
-    }
-
-    @Override
     public int getUnsignedShort(int index) {
         return wrapped.getUnsignedShort(index);
-    }
-
-    @Override
-    public int getUnsignedShortLE(int index) {
-        return wrapped.getUnsignedShortLE(index);
     }
 
     @Override
@@ -149,18 +131,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int getUnsignedMediumLE(int index) {
-        return wrapped.getUnsignedMediumLE(index);
-    }
-
-    @Override
     public int getMedium(int index) {
         return wrapped.getMedium(index);
-    }
-
-    @Override
-    public int getMediumLE(int index) {
-        return wrapped.getMediumLE(index);
     }
 
     @Override
@@ -169,28 +141,13 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int getIntLE(int index) {
-        return wrapped.getIntLE(index);
-    }
-
-    @Override
     public long getUnsignedInt(int index) {
         return wrapped.getUnsignedInt(index);
     }
 
     @Override
-    public long getUnsignedIntLE(int index) {
-        return wrapped.getUnsignedIntLE(index);
-    }
-
-    @Override
     public long getLong(int index) {
         return wrapped.getLong(index);
-    }
-
-    @Override
-    public long getLongLE(int index) {
-        return wrapped.getLongLE(index);
     }
 
     @Override
@@ -206,26 +163,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     @Override
     public double getDouble(int index) {
         return wrapped.getDouble(index);
-    }
-
-    @Override
-    public ByteBuf setShortLE(int index, int value) {
-        return wrapped.setShortLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        return wrapped.setMediumLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setIntLE(int index, int value) {
-        return wrapped.setIntLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        return wrapped.setLongLE(index, value);
     }
 
     @Override
@@ -249,18 +186,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public short readShortLE() {
-        return wrapped.readShortLE();
-    }
-
-    @Override
     public int readUnsignedShort() {
         return wrapped.readUnsignedShort();
-    }
-
-    @Override
-    public int readUnsignedShortLE() {
-        return wrapped.readUnsignedShortLE();
     }
 
     @Override
@@ -269,18 +196,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int readMediumLE() {
-        return wrapped.readMediumLE();
-    }
-
-    @Override
     public int readUnsignedMedium() {
         return wrapped.readUnsignedMedium();
-    }
-
-    @Override
-    public int readUnsignedMediumLE() {
-        return wrapped.readUnsignedMediumLE();
     }
 
     @Override
@@ -289,28 +206,13 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int readIntLE() {
-        return wrapped.readIntLE();
-    }
-
-    @Override
     public long readUnsignedInt() {
         return wrapped.readUnsignedInt();
     }
 
     @Override
-    public long readUnsignedIntLE() {
-        return wrapped.readUnsignedIntLE();
-    }
-
-    @Override
     public long readLong() {
         return wrapped.readLong();
-    }
-
-    @Override
-    public long readLongLE() {
-        return wrapped.readLongLE();
     }
 
     @Override
@@ -339,18 +241,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public ByteBuf retainedSlice() {
-        return wrapped.retainedSlice();
-    }
-
-    @Override
     public ByteBuf slice(int index, int length) {
         return wrapped.slice(index, length);
-    }
-
-    @Override
-    public ByteBuf retainedSlice(int index, int length) {
-        return wrapped.retainedSlice(index, length);
     }
 
     @Override
@@ -389,22 +281,22 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int forEachByte(ByteProcessor processor) {
+    public int forEachByte(ByteBufProcessor processor) {
         return wrapped.forEachByte(processor);
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         return wrapped.forEachByte(index, length, processor);
     }
 
     @Override
-    public int forEachByteDesc(ByteProcessor processor) {
+    public int forEachByteDesc(ByteBufProcessor processor) {
         return wrapped.forEachByteDesc(processor);
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         return wrapped.forEachByteDesc(index, length, processor);
     }
 
@@ -429,18 +321,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    final boolean isAccessible() {
-        return wrapped.isAccessible();
-    }
-
-    @Override
     public ByteBuf duplicate() {
         return wrapped.duplicate();
-    }
-
-    @Override
-    public ByteBuf retainedDuplicate() {
-        return wrapped.retainedDuplicate();
     }
 
     @Override
@@ -449,33 +331,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public ByteBuf readRetainedSlice(int length) {
-        return wrapped.readRetainedSlice(length);
-    }
-
-    @Override
     public int readBytes(GatheringByteChannel out, int length) throws IOException {
         return wrapped.readBytes(out, length);
-    }
-
-    @Override
-    public ByteBuf writeShortLE(int value) {
-        return wrapped.writeShortLE(value);
-    }
-
-    @Override
-    public ByteBuf writeMediumLE(int value) {
-        return wrapped.writeMediumLE(value);
-    }
-
-    @Override
-    public ByteBuf writeIntLE(int value) {
-        return wrapped.writeIntLE(value);
-    }
-
-    @Override
-    public ByteBuf writeLongLE(long value) {
-        return wrapped.writeLongLE(value);
     }
 
     @Override
@@ -550,12 +407,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     @Override
     public CompositeByteBuf addComponent(boolean increaseWriterIndex, int cIndex, ByteBuf buffer) {
         wrapped.addComponent(increaseWriterIndex, cIndex, buffer);
-        return this;
-    }
-
-    @Override
-    public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex, ByteBuf buffer) {
-        wrapped.addFlattenedComponents(increaseWriterIndex, buffer);
         return this;
     }
 
@@ -668,18 +519,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    protected final short _getShortLE(int index) {
-        return wrapped._getShortLE(index);
-    }
-
-    @Override
     protected final int _getUnsignedMedium(int index) {
         return wrapped._getUnsignedMedium(index);
-    }
-
-    @Override
-    protected final int _getUnsignedMediumLE(int index) {
-        return wrapped._getUnsignedMediumLE(index);
     }
 
     @Override
@@ -688,18 +529,8 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    protected final int _getIntLE(int index) {
-        return wrapped._getIntLE(index);
-    }
-
-    @Override
     protected final long _getLong(int index) {
         return wrapped._getLong(index);
-    }
-
-    @Override
-    protected final long _getLongLE(int index) {
-        return wrapped._getLongLE(index);
     }
 
     @Override
@@ -754,11 +585,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    protected final void _setShortLE(int index, int value) {
-        wrapped._setShortLE(index, value);
-    }
-
-    @Override
     public CompositeByteBuf setMedium(int index, int value) {
         wrapped.setMedium(index, value);
         return this;
@@ -767,11 +593,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     @Override
     protected final void _setMedium(int index, int value) {
         wrapped._setMedium(index, value);
-    }
-
-    @Override
-    protected final void _setMediumLE(int index, int value) {
-        wrapped._setMediumLE(index, value);
     }
 
     @Override
@@ -786,11 +607,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    protected final void _setIntLE(int index, int value) {
-        wrapped._setIntLE(index, value);
-    }
-
-    @Override
     public CompositeByteBuf setLong(int index, long value) {
         wrapped.setLong(index, value);
         return this;
@@ -799,11 +615,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     @Override
     protected final void _setLong(int index, long value) {
         wrapped._setLong(index, value);
-    }
-
-    @Override
-    protected final void _setLongLE(int index, long value) {
-        wrapped._setLongLE(index, value);
     }
 
     @Override
@@ -1071,61 +882,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     }
 
     @Override
-    public int getBytes(int index, FileChannel out, long position, int length) throws IOException {
-        return wrapped.getBytes(index, out, position, length);
-    }
-
-    @Override
-    public int setBytes(int index, FileChannel in, long position, int length) throws IOException {
-        return wrapped.setBytes(index, in, position, length);
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return wrapped.isReadOnly();
-    }
-
-    @Override
-    public ByteBuf asReadOnly() {
-        return wrapped.asReadOnly();
-    }
-
-    @Override
-    protected SwappedByteBuf newSwappedByteBuf() {
-        return wrapped.newSwappedByteBuf();
-    }
-
-    @Override
-    public CharSequence getCharSequence(int index, int length, Charset charset) {
-        return wrapped.getCharSequence(index, length, charset);
-    }
-
-    @Override
-    public CharSequence readCharSequence(int length, Charset charset) {
-        return wrapped.readCharSequence(length, charset);
-    }
-
-    @Override
-    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
-        return wrapped.setCharSequence(index, sequence, charset);
-    }
-
-    @Override
-    public int readBytes(FileChannel out, long position, int length) throws IOException {
-        return wrapped.readBytes(out, position, length);
-    }
-
-    @Override
-    public int writeBytes(FileChannel in, long position, int length) throws IOException {
-        return wrapped.writeBytes(in, position, length);
-    }
-
-    @Override
-    public int writeCharSequence(CharSequence sequence, Charset charset) {
-        return wrapped.writeCharSequence(sequence, charset);
-    }
-
-    @Override
     public CompositeByteBuf skipBytes(int length) {
         wrapped.skipBytes(length);
         return this;
@@ -1236,18 +992,6 @@ class WrappedCompositeByteBuf extends CompositeByteBuf {
     @Override
     public CompositeByteBuf retain() {
         wrapped.retain();
-        return this;
-    }
-
-    @Override
-    public CompositeByteBuf touch() {
-        wrapped.touch();
-        return this;
-    }
-
-    @Override
-    public CompositeByteBuf touch(Object hint) {
-        wrapped.touch(hint);
         return this;
     }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,9 +15,7 @@
  */
 package io.netty.handler.codec.compression;
 
-import io.netty.buffer.AbstractByteBufAllocator;
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.embedded.EmbeddedChannel;
@@ -43,8 +41,8 @@ public abstract class ZlibTest {
     private static final byte[] BYTES_LARGE = new byte[1024 * 1024];
     private static final byte[] BYTES_LARGE2 = ("<!--?xml version=\"1.0\" encoding=\"ISO-8859-1\"?-->\n" +
             "<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Strict//EN\" " +
-            "\"https://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
-            "<html xmlns=\"https://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\"><head>\n" +
+            "\"http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd\">\n" +
+            "<html xmlns=\"http://www.w3.org/1999/xhtml\" xml:lang=\"en\" lang=\"en\"><head>\n" +
             "    <title>Apache Tomcat</title>\n" +
             "</head>\n" +
             '\n' +
@@ -90,12 +88,8 @@ public abstract class ZlibTest {
         rand.nextBytes(BYTES_LARGE);
     }
 
-    protected ZlibDecoder createDecoder(ZlibWrapper wrapper) {
-        return createDecoder(wrapper, 0);
-    }
-
     protected abstract ZlibEncoder createEncoder(ZlibWrapper wrapper);
-    protected abstract ZlibDecoder createDecoder(ZlibWrapper wrapper, int maxAllocation);
+    protected abstract ZlibDecoder createDecoder(ZlibWrapper wrapper);
 
     @Test
     public void testGZIP2() throws Exception {
@@ -105,12 +99,13 @@ public abstract class ZlibTest {
 
         EmbeddedChannel chDecoderGZip = new EmbeddedChannel(createDecoder(ZlibWrapper.GZIP));
         try {
-            chDecoderGZip.writeInbound(deflatedData);
+            chDecoderGZip.writeInbound(deflatedData.copy());
             assertTrue(chDecoderGZip.finish());
-            ByteBuf buf = chDecoderGZip.readInbound();
+            ByteBuf buf = (ByteBuf) chDecoderGZip.readInbound();
             assertEquals(buf, data);
             assertNull(chDecoderGZip.readInbound());
             data.release();
+            deflatedData.release();
             buf.release();
         } finally {
             dispose(chDecoderGZip);
@@ -122,12 +117,11 @@ public abstract class ZlibTest {
         EmbeddedChannel chDecoderZlib = new EmbeddedChannel(createDecoder(decoderWrapper));
 
         try {
-            chEncoder.writeOutbound(data.retain());
+            chEncoder.writeOutbound(data.copy());
             chEncoder.flush();
-            data.resetReaderIndex();
 
             for (;;) {
-                ByteBuf deflatedData = chEncoder.readOutbound();
+                ByteBuf deflatedData = (ByteBuf) chEncoder.readOutbound();
                 if (deflatedData == null) {
                     break;
                 }
@@ -137,7 +131,7 @@ public abstract class ZlibTest {
             byte[] decompressed = new byte[data.readableBytes()];
             int offset = 0;
             for (;;) {
-                ByteBuf buf = chDecoderZlib.readInbound();
+                ByteBuf buf = (ByteBuf) chDecoderZlib.readInbound();
                 if (buf == null) {
                     break;
                 }
@@ -174,13 +168,12 @@ public abstract class ZlibTest {
     private void testCompressNone(ZlibWrapper encoderWrapper, ZlibWrapper decoderWrapper) throws Exception {
         EmbeddedChannel chEncoder = new EmbeddedChannel(createEncoder(encoderWrapper));
         EmbeddedChannel chDecoderZlib = new EmbeddedChannel(createDecoder(decoderWrapper));
-
         try {
             // Closing an encoder channel without writing anything should generate both header and footer.
             assertTrue(chEncoder.finish());
 
             for (;;) {
-                ByteBuf deflatedData = chEncoder.readOutbound();
+                ByteBuf deflatedData = (ByteBuf) chEncoder.readOutbound();
                 if (deflatedData == null) {
                     break;
                 }
@@ -190,7 +183,7 @@ public abstract class ZlibTest {
             // Decoder should not generate anything at all.
             boolean decoded = false;
             for (;;) {
-                ByteBuf buf = chDecoderZlib.readInbound();
+                ByteBuf buf = (ByteBuf) chDecoderZlib.readInbound();
                 if (buf == null) {
                     break;
                 }
@@ -229,20 +222,20 @@ public abstract class ZlibTest {
     // Test for https://github.com/netty/netty/issues/2572
     private void testDecompressOnly(ZlibWrapper decoderWrapper, byte[] compressed, byte[] data) throws Exception {
         EmbeddedChannel chDecoder = new EmbeddedChannel(createDecoder(decoderWrapper));
-        chDecoder.writeInbound(Unpooled.copiedBuffer(compressed));
+        chDecoder.writeInbound(Unpooled.wrappedBuffer(compressed));
         assertTrue(chDecoder.finish());
 
         ByteBuf decoded = Unpooled.buffer(data.length);
 
         for (;;) {
-            ByteBuf buf = chDecoder.readInbound();
+            ByteBuf buf = (ByteBuf) chDecoder.readInbound();
             if (buf == null) {
                 break;
             }
             decoded.writeBytes(buf);
             buf.release();
         }
-        assertEquals(Unpooled.copiedBuffer(data), decoded);
+        assertEquals(Unpooled.wrappedBuffer(data), decoded);
         decoded.release();
     }
 
@@ -298,7 +291,7 @@ public abstract class ZlibTest {
 
         ByteBuf encoded = Unpooled.buffer();
         for (;;) {
-            ByteBuf buf = chEncoder.readOutbound();
+            ByteBuf buf = (ByteBuf) chEncoder.readOutbound();
             if (buf == null) {
                 break;
             }
@@ -351,25 +344,6 @@ public abstract class ZlibTest {
         testCompressLarge(ZlibWrapper.GZIP, ZlibWrapper.ZLIB_OR_NONE);
     }
 
-    @Test
-    public void testMaxAllocation() throws Exception {
-        int maxAllocation = 1024;
-        ZlibDecoder decoder = createDecoder(ZlibWrapper.ZLIB, maxAllocation);
-        EmbeddedChannel chDecoder = new EmbeddedChannel(decoder);
-        TestByteBufAllocator alloc = new TestByteBufAllocator(chDecoder.alloc());
-        chDecoder.config().setAllocator(alloc);
-
-        try {
-            chDecoder.writeInbound(Unpooled.wrappedBuffer(deflate(BYTES_LARGE)));
-            fail("decompressed size > maxAllocation, so should have thrown exception");
-        } catch (DecompressionException e) {
-            assertTrue(e.getMessage().startsWith("Decompression buffer has reached maximum size"));
-            assertEquals(maxAllocation, alloc.getMaxAllocation());
-            assertTrue(decoder.isClosed());
-            assertFalse(chDecoder.finish());
-        }
-    }
-
     private static byte[] gzip(byte[] bytes) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         GZIPOutputStream stream = new GZIPOutputStream(out);
@@ -384,35 +358,5 @@ public abstract class ZlibTest {
         stream.write(bytes);
         stream.close();
         return out.toByteArray();
-    }
-
-    private static final class TestByteBufAllocator extends AbstractByteBufAllocator {
-        private ByteBufAllocator wrapped;
-        private int maxAllocation;
-
-        TestByteBufAllocator(ByteBufAllocator wrapped) {
-            this.wrapped = wrapped;
-        }
-
-        public int getMaxAllocation() {
-            return maxAllocation;
-        }
-
-        @Override
-        public boolean isDirectBufferPooled() {
-            return wrapped.isDirectBufferPooled();
-        }
-
-        @Override
-        protected ByteBuf newHeapBuffer(int initialCapacity, int maxCapacity) {
-            maxAllocation = Math.max(maxAllocation, maxCapacity);
-            return wrapped.heapBuffer(initialCapacity, maxCapacity);
-        }
-
-        @Override
-        protected ByteBuf newDirectBuffer(int initialCapacity, int maxCapacity) {
-            maxAllocation = Math.max(maxAllocation, maxCapacity);
-            return wrapped.directBuffer(initialCapacity, maxCapacity);
-        }
     }
 }

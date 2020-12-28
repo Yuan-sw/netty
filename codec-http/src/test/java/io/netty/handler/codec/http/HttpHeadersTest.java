@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,62 +15,59 @@
  */
 package io.netty.handler.codec.http;
 
-import io.netty.util.AsciiString;
+import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 
-import static io.netty.handler.codec.http.HttpHeadersTestUtils.of;
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertThat;
 
 public class HttpHeadersTest {
 
     @Test
     public void testRemoveTransferEncodingIgnoreCase() {
         HttpMessage message = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
-        message.headers().set(HttpHeaderNames.TRANSFER_ENCODING, "Chunked");
-        assertFalse(message.headers().isEmpty());
-        HttpUtil.setTransferEncodingChunked(message, false);
-        assertTrue(message.headers().isEmpty());
+        message.headers().set(HttpHeaders.Names.TRANSFER_ENCODING, "Chunked");
+        HttpHeaders.removeTransferEncodingChunked(message);
+        Assert.assertTrue(message.headers().isEmpty());
     }
 
     // Test for https://github.com/netty/netty/issues/1690
     @Test
     public void testGetOperations() {
         HttpHeaders headers = new DefaultHttpHeaders();
-        headers.add(of("Foo"), of("1"));
-        headers.add(of("Foo"), of("2"));
+        headers.add("Foo", "1");
+        headers.add("Foo", "2");
 
-        assertEquals("1", headers.get(of("Foo")));
+        assertEquals("1", headers.get("Foo"));
 
-        List<String> values = headers.getAll(of("Foo"));
+        List<String> values = headers.getAll("Foo");
         assertEquals(2, values.size());
         assertEquals("1", values.get(0));
         assertEquals("2", values.get(1));
     }
 
     @Test
-    public void testEqualsIgnoreCase() {
-        assertThat(AsciiString.contentEqualsIgnoreCase(null, null), is(true));
-        assertThat(AsciiString.contentEqualsIgnoreCase(null, "foo"), is(false));
-        assertThat(AsciiString.contentEqualsIgnoreCase("bar", null), is(false));
-        assertThat(AsciiString.contentEqualsIgnoreCase("FoO", "fOo"), is(true));
+    public void testEquansIgnoreCase() {
+        assertThat(HttpHeaders.equalsIgnoreCase(null, null), is(true));
+        assertThat(HttpHeaders.equalsIgnoreCase(null, "foo"), is(false));
+        assertThat(HttpHeaders.equalsIgnoreCase("bar", null), is(false));
+        assertThat(HttpHeaders.equalsIgnoreCase("FoO", "fOo"), is(true));
     }
 
     @Test(expected = NullPointerException.class)
     public void testSetNullHeaderValueValidate() {
         HttpHeaders headers = new DefaultHttpHeaders(true);
-        headers.set(of("test"), (CharSequence) null);
+        headers.set("test", (CharSequence) null);
     }
 
     @Test(expected = NullPointerException.class)
     public void testSetNullHeaderValueNotValidate() {
         HttpHeaders headers = new DefaultHttpHeaders(false);
-        headers.set(of("test"), (CharSequence) null);
+        headers.set("test", (CharSequence) null);
     }
 
     @Test(expected = IllegalArgumentException.class)
@@ -82,8 +79,18 @@ public class HttpHeadersTest {
     @Test
     public void testSetSelfIsNoOp() {
         HttpHeaders headers = new DefaultHttpHeaders(false);
-        headers.add("name", "value");
+        headers.add("some", "thing");
         headers.set(headers);
-        assertEquals(1, headers.size());
+        assertEquals(1, headers.entries().size());
+        assertEquals("thing", headers.get("some"));
+    }
+
+    @Test
+    public void testDoubleChunkedHeader() {
+        HttpMessage message = new DefaultHttpResponse(HttpVersion.HTTP_1_1, HttpResponseStatus.OK);
+        message.headers().add(HttpHeaders.Names.TRANSFER_ENCODING, "chunked");
+        HttpHeaders.setTransferEncodingChunked(message);
+        List<String> expected = Collections.singletonList("chunked");
+        assertEquals(expected, message.headers().getAll(HttpHeaders.Names.TRANSFER_ENCODING));
     }
 }

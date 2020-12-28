@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,8 +15,6 @@
  */
 package io.netty.buffer;
 
-
-import io.netty.util.ByteProcessor;
 import io.netty.util.ResourceLeakTracker;
 
 import java.io.IOException;
@@ -24,7 +22,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
@@ -52,21 +49,9 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public ByteBuf retainedSlice() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.retainedSlice();
-    }
-
-    @Override
     public ByteBuf slice(int index, int length) {
         recordLeakNonRefCountingOperation(leak);
         return super.slice(index, length);
-    }
-
-    @Override
-    public ByteBuf retainedSlice(int index, int length) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.retainedSlice(index, length);
     }
 
     @Override
@@ -76,33 +61,9 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public ByteBuf retainedDuplicate() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.retainedDuplicate();
-    }
-
-    @Override
     public ByteBuf readSlice(int length) {
         recordLeakNonRefCountingOperation(leak);
         return super.readSlice(length);
-    }
-
-    @Override
-    public ByteBuf readRetainedSlice(int length) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readRetainedSlice(length);
-    }
-
-    @Override
-    public ByteBuf asReadOnly() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.asReadOnly();
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.isReadOnly();
     }
 
     @Override
@@ -253,12 +214,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     public int getBytes(int index, GatheringByteChannel out, int length) throws IOException {
         recordLeakNonRefCountingOperation(leak);
         return super.getBytes(index, out, length);
-    }
-
-    @Override
-    public CharSequence getCharSequence(int index, int length, Charset charset) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getCharSequence(index, length, charset);
     }
 
     @Override
@@ -502,12 +457,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public CharSequence readCharSequence(int length, Charset charset) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readCharSequence(length, charset);
-    }
-
-    @Override
     public CompositeByteBuf skipBytes(int length) {
         recordLeakNonRefCountingOperation(leak);
         return super.skipBytes(length);
@@ -622,12 +571,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public int writeCharSequence(CharSequence sequence, Charset charset) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeCharSequence(sequence, charset);
-    }
-
-    @Override
     public int indexOf(int fromIndex, int toIndex, byte value) {
         recordLeakNonRefCountingOperation(leak);
         return super.indexOf(fromIndex, toIndex, value);
@@ -652,25 +595,25 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public int forEachByte(ByteProcessor processor) {
+    public int forEachByte(ByteBufProcessor processor) {
         recordLeakNonRefCountingOperation(leak);
         return super.forEachByte(processor);
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         recordLeakNonRefCountingOperation(leak);
         return super.forEachByte(index, length, processor);
     }
 
     @Override
-    public int forEachByteDesc(ByteProcessor processor) {
+    public int forEachByteDesc(ByteBufProcessor processor) {
         recordLeakNonRefCountingOperation(leak);
         return super.forEachByteDesc(processor);
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         recordLeakNonRefCountingOperation(leak);
         return super.forEachByteDesc(index, length, processor);
     }
@@ -742,144 +685,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public short getShortLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getShortLE(index);
-    }
-
-    @Override
-    public int getUnsignedShortLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getUnsignedShortLE(index);
-    }
-
-    @Override
-    public int getUnsignedMediumLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getUnsignedMediumLE(index);
-    }
-
-    @Override
-    public int getMediumLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getMediumLE(index);
-    }
-
-    @Override
-    public int getIntLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getIntLE(index);
-    }
-
-    @Override
-    public long getUnsignedIntLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getUnsignedIntLE(index);
-    }
-
-    @Override
-    public long getLongLE(int index) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getLongLE(index);
-    }
-
-    @Override
-    public ByteBuf setShortLE(int index, int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setShortLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setMediumLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setIntLE(int index, int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setIntLE(index, value);
-    }
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setLongLE(index, value);
-    }
-
-    @Override
-    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setCharSequence(index, sequence, charset);
-    }
-
-    @Override
-    public short readShortLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readShortLE();
-    }
-
-    @Override
-    public int readUnsignedShortLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readUnsignedShortLE();
-    }
-
-    @Override
-    public int readMediumLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readMediumLE();
-    }
-
-    @Override
-    public int readUnsignedMediumLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readUnsignedMediumLE();
-    }
-
-    @Override
-    public int readIntLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readIntLE();
-    }
-
-    @Override
-    public long readUnsignedIntLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readUnsignedIntLE();
-    }
-
-    @Override
-    public long readLongLE() {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readLongLE();
-    }
-
-    @Override
-    public ByteBuf writeShortLE(int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeShortLE(value);
-    }
-
-    @Override
-    public ByteBuf writeMediumLE(int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeMediumLE(value);
-    }
-
-    @Override
-    public ByteBuf writeIntLE(int value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeIntLE(value);
-    }
-
-    @Override
-    public ByteBuf writeLongLE(long value) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeLongLE(value);
-    }
-
-    @Override
     public CompositeByteBuf addComponent(ByteBuf buffer) {
         recordLeakNonRefCountingOperation(leak);
         return super.addComponent(buffer);
@@ -940,12 +745,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public CompositeByteBuf addFlattenedComponents(boolean increaseWriterIndex, ByteBuf buffer) {
-        recordLeakNonRefCountingOperation(leak);
-        return super.addFlattenedComponents(increaseWriterIndex, buffer);
-    }
-
-    @Override
     public CompositeByteBuf removeComponent(int cIndex) {
         recordLeakNonRefCountingOperation(leak);
         return super.removeComponent(cIndex);
@@ -988,30 +787,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     }
 
     @Override
-    public int getBytes(int index, FileChannel out, long position, int length) throws IOException {
-        recordLeakNonRefCountingOperation(leak);
-        return super.getBytes(index, out, position, length);
-    }
-
-    @Override
-    public int setBytes(int index, FileChannel in, long position, int length) throws IOException {
-        recordLeakNonRefCountingOperation(leak);
-        return super.setBytes(index, in, position, length);
-    }
-
-    @Override
-    public int readBytes(FileChannel out, long position, int length) throws IOException {
-        recordLeakNonRefCountingOperation(leak);
-        return super.readBytes(out, position, length);
-    }
-
-    @Override
-    public int writeBytes(FileChannel in, long position, int length) throws IOException {
-        recordLeakNonRefCountingOperation(leak);
-        return super.writeBytes(in, position, length);
-    }
-
-    @Override
     public CompositeByteBuf retain() {
         leak.record();
         return super.retain();
@@ -1033,18 +808,6 @@ final class AdvancedLeakAwareCompositeByteBuf extends SimpleLeakAwareCompositeBy
     public boolean release(int decrement) {
         leak.record();
         return super.release(decrement);
-    }
-
-    @Override
-    public CompositeByteBuf touch() {
-        leak.record();
-        return this;
-    }
-
-    @Override
-    public CompositeByteBuf touch(Object hint) {
-        leak.record(hint);
-        return this;
     }
 
     @Override

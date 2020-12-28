@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.util.concurrent.CompleteFuture;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.Future;
 import io.netty.util.concurrent.GenericFutureListener;
-import io.netty.util.internal.ObjectUtil;
 
 /**
  * A skeletal {@link ChannelFuture} implementation which represents a
@@ -36,7 +35,10 @@ abstract class CompleteChannelFuture extends CompleteFuture<Void> implements Cha
      */
     protected CompleteChannelFuture(Channel channel, EventExecutor executor) {
         super(executor);
-        this.channel = ObjectUtil.checkNotNull(channel, "channel");
+        if (channel == null) {
+            throw new NullPointerException("channel");
+        }
+        this.channel = channel;
     }
 
     @Override
@@ -101,10 +103,5 @@ abstract class CompleteChannelFuture extends CompleteFuture<Void> implements Cha
     @Override
     public Void getNow() {
         return null;
-    }
-
-    @Override
-    public boolean isVoid() {
-        return false;
     }
 }

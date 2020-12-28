@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,6 @@
 package io.netty.handler.codec.http;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.FileRegion;
@@ -24,9 +23,7 @@ import io.netty.handler.codec.MessageToMessageEncoder;
 import io.netty.util.CharsetUtil;
 import io.netty.util.internal.StringUtil;
 
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map.Entry;
 
 import static io.netty.buffer.Unpooled.directBuffer;
 import static io.netty.buffer.Unpooled.unreleasableBuffer;
@@ -41,16 +38,16 @@ import static io.netty.handler.codec.http.HttpConstants.LF;
  *
  * Please note that this encoder is designed to be extended to implement
  * a protocol derived from HTTP, such as
- * <a href="https://en.wikipedia.org/wiki/Real_Time_Streaming_Protocol">RTSP</a> and
- * <a href="https://en.wikipedia.org/wiki/Internet_Content_Adaptation_Protocol">ICAP</a>.
+ * <a href="http://en.wikipedia.org/wiki/Real_Time_Streaming_Protocol">RTSP</a> and
+ * <a href="http://en.wikipedia.org/wiki/Internet_Content_Adaptation_Protocol">ICAP</a>.
  * To implement the encoder of such a derived protocol, extend this class and
  * implement all abstract methods properly.
  */
 public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageToMessageEncoder<Object> {
-    static final int CRLF_SHORT = (CR << 8) | LF;
-    private static final int ZERO_CRLF_MEDIUM = ('0' << 16) | CRLF_SHORT;
+    static final byte[] CRLF = { CR, LF };
+    private static final byte[] ZERO_CRLF = { '0', CR, LF };
     private static final byte[] ZERO_CRLF_CRLF = { '0', CR, LF, CR, LF };
-    private static final ByteBuf CRLF_BUF = unreleasableBuffer(directBuffer(2).writeByte(CR).writeByte(LF));
+    private static final ByteBuf CRLF_BUF = unreleasableBuffer(directBuffer(CRLF.length).writeBytes(CRLF));
     private static final ByteBuf ZERO_CRLF_CRLF_BUF = unreleasableBuffer(directBuffer(ZERO_CRLF_CRLF.length)
             .writeBytes(ZERO_CRLF_CRLF));
     private static final float HEADERS_WEIGHT_NEW = 1 / 5f;
@@ -83,8 +80,7 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
         ByteBuf buf = null;
         if (msg instanceof HttpMessage) {
             if (state != ST_INIT) {
-                throw new IllegalStateException("unexpected message type: " + StringUtil.simpleClassName(msg)
-                        + ", state: " + state);
+                throw new IllegalStateException("unexpected message type: " + StringUtil.simpleClassName(msg));
             }
 
             @SuppressWarnings({ "unchecked", "CastConflictsWithInstanceof" })
@@ -94,12 +90,12 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
             // Encode the message.
             encodeInitialLine(buf, m);
             state = isContentAlwaysEmpty(m) ? ST_CONTENT_ALWAYS_EMPTY :
-                    HttpUtil.isTransferEncodingChunked(m) ? ST_CONTENT_CHUNK : ST_CONTENT_NON_CHUNK;
+                    HttpHeaders.isTransferEncodingChunked(m) ? ST_CONTENT_CHUNK : ST_CONTENT_NON_CHUNK;
 
             sanitizeHeadersBeforeEncode(m, state == ST_CONTENT_ALWAYS_EMPTY);
 
             encodeHeaders(m.headers(), buf);
-            ByteBufUtil.writeShortBE(buf, CRLF_SHORT);
+            buf.writeBytes(CRLF);
 
             headersEncodedSizeAccumulator = HEADERS_WEIGHT_NEW * padSizeForAccumulation(buf.readableBytes()) +
                                             HEADERS_WEIGHT_HISTORICAL * headersEncodedSizeAccumulator;
@@ -121,8 +117,7 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
         if (msg instanceof HttpContent || msg instanceof ByteBuf || msg instanceof FileRegion) {
             switch (state) {
                 case ST_INIT:
-                    throw new IllegalStateException("unexpected message type: " + StringUtil.simpleClassName(msg)
-                        + ", state: " + state);
+                    throw new IllegalStateException("unexpected message type: " + StringUtil.simpleClassName(msg));
                 case ST_CONTENT_NON_CHUNK:
                     final long contentLength = contentLength(msg);
                     if (contentLength > 0) {
@@ -186,19 +181,15 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
      * Encode the {@link HttpHeaders} into a {@link ByteBuf}.
      */
     protected void encodeHeaders(HttpHeaders headers, ByteBuf buf) {
-        Iterator<Entry<CharSequence, CharSequence>> iter = headers.iteratorCharSequence();
-        while (iter.hasNext()) {
-            Entry<CharSequence, CharSequence> header = iter.next();
-            HttpHeadersEncoder.encoderHeader(header.getKey(), header.getValue(), buf);
-        }
+        HttpHeaders.encode(headers, buf);
     }
 
     private void encodeChunkedContent(ChannelHandlerContext ctx, Object msg, long contentLength, List<Object> out) {
         if (contentLength > 0) {
-            String lengthHex = Long.toHexString(contentLength);
-            ByteBuf buf = ctx.alloc().buffer(lengthHex.length() + 2);
-            buf.writeCharSequence(lengthHex, CharsetUtil.US_ASCII);
-            ByteBufUtil.writeShortBE(buf, CRLF_SHORT);
+            byte[] length = Long.toHexString(contentLength).getBytes(CharsetUtil.US_ASCII);
+            ByteBuf buf = ctx.alloc().buffer(length.length + 2);
+            buf.writeBytes(length);
+            buf.writeBytes(CRLF);
             out.add(buf);
             out.add(encodeAndRetain(msg));
             out.add(CRLF_BUF.duplicate());
@@ -210,9 +201,9 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
                 out.add(ZERO_CRLF_CRLF_BUF.duplicate());
             } else {
                 ByteBuf buf = ctx.alloc().buffer((int) trailersEncodedSizeAccumulator);
-                ByteBufUtil.writeMediumBE(buf, ZERO_CRLF_MEDIUM);
+                buf.writeBytes(ZERO_CRLF);
                 encodeHeaders(headers, buf);
-                ByteBufUtil.writeShortBE(buf, CRLF_SHORT);
+                buf.writeBytes(CRLF);
                 trailersEncodedSizeAccumulator = TRAILERS_WEIGHT_NEW * padSizeForAccumulation(buf.readableBytes()) +
                                                  TRAILERS_WEIGHT_HISTORICAL * trailersEncodedSizeAccumulator;
                 out.add(buf);
@@ -285,7 +276,7 @@ public abstract class HttpObjectEncoder<H extends HttpMessage> extends MessageTo
 
     @Deprecated
     protected static void encodeAscii(String s, ByteBuf buf) {
-        buf.writeCharSequence(s, CharsetUtil.US_ASCII);
+        HttpHeaders.encodeAscii0(s, buf);
     }
 
     protected abstract void encodeInitialLine(ByteBuf buf, H message) throws Exception;

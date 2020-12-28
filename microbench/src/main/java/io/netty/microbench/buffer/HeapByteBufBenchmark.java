@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,16 +19,12 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.microbench.util.AbstractMicrobenchmark;
 import org.openjdk.jmh.annotations.Benchmark;
-import org.openjdk.jmh.annotations.Param;
 import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.TearDown;
 
 import java.lang.reflect.Constructor;
 
 public class HeapByteBufBenchmark extends AbstractMicrobenchmark {
-
-    @Param({ "true", "false" })
-    public String checkBounds;
 
     private ByteBuf unsafeBuffer;
     private ByteBuf buffer;
@@ -43,7 +39,6 @@ public class HeapByteBufBenchmark extends AbstractMicrobenchmark {
 
     @Setup
     public void setup() throws Exception {
-        System.setProperty("io.netty.buffer.bytebuf.checkBounds", checkBounds);
         unsafeBuffer = newBuffer("io.netty.buffer.UnpooledUnsafeHeapByteBuf");
         buffer = newBuffer("io.netty.buffer.UnpooledHeapByteBuf");
         unsafeBuffer.writeLong(1L);

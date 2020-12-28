@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,6 @@
 package io.netty.handler.codec.http;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.stream.ChunkedInput;
 
@@ -82,14 +81,8 @@ public class HttpChunkedInput implements ChunkedInput<HttpContent> {
         input.close();
     }
 
-    @Deprecated
     @Override
     public HttpContent readChunk(ChannelHandlerContext ctx) throws Exception {
-        return readChunk(ctx.alloc());
-    }
-
-    @Override
-    public HttpContent readChunk(ByteBufAllocator allocator) throws Exception {
         if (input.isEndOfInput()) {
             if (sentLastChunk) {
                 return null;
@@ -99,21 +92,11 @@ public class HttpChunkedInput implements ChunkedInput<HttpContent> {
                 return lastHttpContent;
             }
         } else {
-            ByteBuf buf = input.readChunk(allocator);
+            ByteBuf buf = input.readChunk(ctx);
             if (buf == null) {
                 return null;
             }
             return new DefaultHttpContent(buf);
         }
-    }
-
-    @Override
-    public long length() {
-        return input.length();
-    }
-
-    @Override
-    public long progress() {
-        return input.progress();
     }
 }

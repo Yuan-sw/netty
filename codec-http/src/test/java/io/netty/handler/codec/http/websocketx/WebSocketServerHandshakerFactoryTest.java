@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,10 +16,10 @@
 
 package io.netty.handler.codec.http.websocketx;
 
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.embedded.EmbeddedChannel;
 import io.netty.handler.codec.http.FullHttpResponse;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpUtil;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.util.ReferenceCountUtil;
 import org.junit.Test;
@@ -30,7 +30,7 @@ public class WebSocketServerHandshakerFactoryTest {
 
     @Test
     public void testUnsupportedVersion() throws Exception {
-        EmbeddedChannel ch = new EmbeddedChannel();
+        EmbeddedChannel ch = new EmbeddedChannel(new ChannelInboundHandlerAdapter());
         WebSocketServerHandshakerFactory.sendUnsupportedVersionResponse(ch);
         ch.runPendingTasks();
         Object msg = ch.readOutbound();
@@ -40,11 +40,11 @@ public class WebSocketServerHandshakerFactoryTest {
         }
         FullHttpResponse response = (FullHttpResponse) msg;
 
-        assertEquals(HttpResponseStatus.UPGRADE_REQUIRED, response.status());
+        assertEquals(HttpResponseStatus.UPGRADE_REQUIRED, response.getStatus());
         assertEquals(WebSocketVersion.V13.toHttpHeaderValue(),
-                response.headers().get(HttpHeaderNames.SEC_WEBSOCKET_VERSION));
-        assertTrue(HttpUtil.isContentLengthSet(response));
-        assertEquals(0, HttpUtil.getContentLength(response));
+                response.headers().get(HttpHeaders.Names.SEC_WEBSOCKET_VERSION));
+        assertTrue(HttpHeaders.isContentLengthSet(response));
+        assertEquals(0, HttpHeaders.getContentLength(response));
 
         ReferenceCountUtil.release(response);
         assertFalse(ch.finish());

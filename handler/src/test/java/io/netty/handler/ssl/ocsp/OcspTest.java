@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -26,10 +26,10 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.local.LocalAddress;
 import io.netty.channel.local.LocalChannel;
+import io.netty.channel.local.LocalEventLoopGroup;
 import io.netty.channel.local.LocalServerChannel;
 import io.netty.handler.ssl.OpenSsl;
 import io.netty.handler.ssl.ReferenceCountedOpenSslEngine;
@@ -344,7 +344,7 @@ public class OcspTest {
                         .build();
 
                 try {
-                    EventLoopGroup group = new DefaultEventLoopGroup();
+                    EventLoopGroup group = new LocalEventLoopGroup();
                     try {
                         LocalAddress address = new LocalAddress("handshake-" + Math.random());
                         Channel server = newServer(group, address, serverSslContext, response, serverHandler);
@@ -459,7 +459,7 @@ public class OcspTest {
 
         private volatile byte[] response;
 
-        TestClientOcspContext(boolean valid) {
+        public TestClientOcspContext(boolean valid) {
             this.valid = valid;
         }
 
@@ -481,7 +481,7 @@ public class OcspTest {
 
         private final OcspClientCallback callback;
 
-        OcspClientCallbackHandler(ReferenceCountedOpenSslEngine engine, OcspClientCallback callback) {
+        public OcspClientCallbackHandler(ReferenceCountedOpenSslEngine engine, OcspClientCallback callback) {
             super(engine);
             this.callback = callback;
         }
@@ -496,7 +496,7 @@ public class OcspTest {
     private static final class OcspTestException extends IllegalStateException {
         private static final long serialVersionUID = 4516426833250228159L;
 
-        OcspTestException(String message) {
+        public OcspTestException(String message) {
             super(message);
         }
     }

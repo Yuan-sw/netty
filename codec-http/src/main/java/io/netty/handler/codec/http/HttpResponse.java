@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,6 +14,7 @@
  * under the License.
  */
 package io.netty.handler.codec.http;
+
 
 /**
  * An HTTP response.
@@ -24,7 +25,7 @@ package io.netty.handler.codec.http;
  * separately via {@link io.netty.handler.codec.http.cookie.ServerCookieDecoder},
  * {@link io.netty.handler.codec.http.cookie.ClientCookieDecoder},
  * {@link io.netty.handler.codec.http.cookie.ServerCookieEncoder},
- * and {@link io.netty.handler.codec.http.cookie.ClientCookieEncoder}.
+ * and {@link @io.netty.handler.codec.http.cookie.ClientCookieEncoder}.
  *
  * @see HttpRequest
  * @see io.netty.handler.codec.http.cookie.ServerCookieDecoder
@@ -35,17 +36,11 @@ package io.netty.handler.codec.http;
 public interface HttpResponse extends HttpMessage {
 
     /**
-     * @deprecated Use {@link #status()} instead.
-     */
-    @Deprecated
-    HttpResponseStatus getStatus();
-
-    /**
      * Returns the status of this {@link HttpResponse}.
      *
      * @return The {@link HttpResponseStatus} of this {@link HttpResponse}
      */
-    HttpResponseStatus status();
+    HttpResponseStatus getStatus();
 
     /**
      * Set the status of this {@link HttpResponse}.

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,21 +18,13 @@ package io.netty.handler.codec.http;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelPipeline;
 import io.netty.channel.CombinedChannelDuplexHandler;
 import io.netty.handler.codec.PrematureChannelClosureException;
-import io.netty.util.ReferenceCountUtil;
 
 import java.util.ArrayDeque;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicLong;
-
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_ALLOW_DUPLICATE_CONTENT_LENGTHS;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_CHUNK_SIZE;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_HEADER_SIZE;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_MAX_INITIAL_LINE_LENGTH;
-import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_VALIDATE_HEADERS;
 
 /**
  * A combination of {@link HttpRequestEncoder} and {@link HttpResponseDecoder}
@@ -48,14 +40,11 @@ import static io.netty.handler.codec.http.HttpObjectDecoder.DEFAULT_VALIDATE_HEA
  *
  * @see HttpServerCodec
  */
-public final class HttpClientCodec extends CombinedChannelDuplexHandler<HttpResponseDecoder, HttpRequestEncoder>
-        implements HttpClientUpgradeHandler.SourceCodec {
-    public static final boolean DEFAULT_FAIL_ON_MISSING_RESPONSE = false;
-    public static final boolean DEFAULT_PARSE_HTTP_AFTER_CONNECT_REQUEST = false;
+public final class HttpClientCodec
+        extends CombinedChannelDuplexHandler<HttpResponseDecoder, HttpRequestEncoder> {
 
     /** A queue that is used for correlating a request and a response. */
     private final Queue<HttpMethod> queue = new ArrayDeque<HttpMethod>();
-    private final boolean parseHttpAfterConnectRequest;
 
     /** If true, decoding stops (i.e. pass-through) */
     private boolean done;
@@ -69,96 +58,7 @@ public final class HttpClientCodec extends CombinedChannelDuplexHandler<HttpResp
      * {@code maxChunkSize (8192)}).
      */
     public HttpClientCodec() {
-        this(DEFAULT_MAX_INITIAL_LINE_LENGTH, DEFAULT_MAX_HEADER_SIZE, DEFAULT_MAX_CHUNK_SIZE,
-             DEFAULT_FAIL_ON_MISSING_RESPONSE);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize) {
-        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, DEFAULT_FAIL_ON_MISSING_RESPONSE);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse) {
-        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, failOnMissingResponse, DEFAULT_VALIDATE_HEADERS);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
-            boolean validateHeaders) {
-        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, failOnMissingResponse, validateHeaders,
-             DEFAULT_PARSE_HTTP_AFTER_CONNECT_REQUEST);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
-            boolean validateHeaders, boolean parseHttpAfterConnectRequest) {
-        init(new Decoder(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders), new Encoder());
-        this.failOnMissingResponse = failOnMissingResponse;
-        this.parseHttpAfterConnectRequest = parseHttpAfterConnectRequest;
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
-            boolean validateHeaders, int initialBufferSize) {
-        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, failOnMissingResponse, validateHeaders,
-             initialBufferSize, DEFAULT_PARSE_HTTP_AFTER_CONNECT_REQUEST);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
-            boolean validateHeaders, int initialBufferSize, boolean parseHttpAfterConnectRequest) {
-        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, failOnMissingResponse, validateHeaders,
-             initialBufferSize, parseHttpAfterConnectRequest, DEFAULT_ALLOW_DUPLICATE_CONTENT_LENGTHS);
-    }
-
-    /**
-     * Creates a new instance with the specified decoder options.
-     */
-    public HttpClientCodec(
-            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
-            boolean validateHeaders, int initialBufferSize, boolean parseHttpAfterConnectRequest,
-            boolean allowDuplicateContentLengths) {
-        init(new Decoder(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize,
-                         allowDuplicateContentLengths),
-             new Encoder());
-        this.parseHttpAfterConnectRequest = parseHttpAfterConnectRequest;
-        this.failOnMissingResponse = failOnMissingResponse;
-    }
-
-    /**
-     * Prepares to upgrade to another protocol from HTTP. Disables the {@link Encoder}.
-     */
-    @Override
-    public void prepareUpgradeFrom(ChannelHandlerContext ctx) {
-        ((Encoder) outboundHandler()).upgraded = true;
-    }
-
-    /**
-     * Upgrades to another protocol from HTTP. Removes the {@link Decoder} and {@link Encoder} from
-     * the pipeline.
-     */
-    @Override
-    public void upgradeFrom(ChannelHandlerContext ctx) {
-        final ChannelPipeline p = ctx.pipeline();
-        p.remove(this);
+        this(4096, 8192, 8192, false);
     }
 
     public void setSingleDecode(boolean singleDecode) {
@@ -169,26 +69,54 @@ public final class HttpClientCodec extends CombinedChannelDuplexHandler<HttpResp
         return inboundHandler().isSingleDecode();
     }
 
-    private final class Encoder extends HttpRequestEncoder {
+    /**
+     * Creates a new instance with the specified decoder options.
+     */
+    public HttpClientCodec(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize) {
+        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, false);
+    }
 
-        boolean upgraded;
+    /**
+     * Creates a new instance with the specified decoder options.
+     */
+    public HttpClientCodec(
+            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse) {
+        this(maxInitialLineLength, maxHeaderSize, maxChunkSize, failOnMissingResponse, true);
+    }
+
+    /**
+     * Creates a new instance with the specified decoder options.
+     */
+    public HttpClientCodec(
+            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
+            boolean validateHeaders) {
+        init(new Decoder(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders), new Encoder());
+        this.failOnMissingResponse = failOnMissingResponse;
+    }
+
+    /**
+     * Creates a new instance with the specified decoder options.
+     */
+    public HttpClientCodec(
+            int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean failOnMissingResponse,
+            boolean validateHeaders, int initialBufferSize) {
+        init(new Decoder(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize),
+             new Encoder());
+        this.failOnMissingResponse = failOnMissingResponse;
+    }
+
+    private final class Encoder extends HttpRequestEncoder {
 
         @Override
         protected void encode(
                 ChannelHandlerContext ctx, Object msg, List<Object> out) throws Exception {
-
-            if (upgraded) {
-                out.add(ReferenceCountUtil.retain(msg));
-                return;
-            }
-
-            if (msg instanceof HttpRequest) {
-                queue.offer(((HttpRequest) msg).method());
+            if (msg instanceof HttpRequest && !done) {
+                queue.offer(((HttpRequest) msg).getMethod());
             }
 
             super.encode(ctx, msg, out);
 
-            if (failOnMissingResponse && !done) {
+            if (failOnMissingResponse) {
                 // check if the request is chunked if so do not increment
                 if (msg instanceof LastHttpContent) {
                     // increment as its the last chunk
@@ -204,9 +132,8 @@ public final class HttpClientCodec extends CombinedChannelDuplexHandler<HttpResp
         }
 
         Decoder(int maxInitialLineLength, int maxHeaderSize, int maxChunkSize, boolean validateHeaders,
-                int initialBufferSize, boolean allowDuplicateContentLengths) {
-            super(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize,
-                  allowDuplicateContentLengths);
+                int initialBufferSize) {
+            super(maxInitialLineLength, maxHeaderSize, maxChunkSize, validateHeaders, initialBufferSize);
         }
 
         @Override
@@ -245,63 +172,54 @@ public final class HttpClientCodec extends CombinedChannelDuplexHandler<HttpResp
 
         @Override
         protected boolean isContentAlwaysEmpty(HttpMessage msg) {
-            // Get the method of the HTTP request that corresponds to the
-            // current response.
-            //
-            // Even if we do not use the method to compare we still need to poll it to ensure we keep
-            // request / response pairs in sync.
-            HttpMethod method = queue.poll();
-
-            final int statusCode = ((HttpResponse) msg).status().code();
-            if (statusCode >= 100 && statusCode < 200) {
-                // An informational response should be excluded from paired comparison.
+            final int statusCode = ((HttpResponse) msg).getStatus().code();
+            if (statusCode == 100 || statusCode == 101) {
+                // 100-continue and 101 switching protocols response should be excluded from paired comparison.
                 // Just delegate to super method which has all the needed handling.
                 return super.isContentAlwaysEmpty(msg);
             }
 
-            // If the remote peer did for example send multiple responses for one request (which is not allowed per
-            // spec but may still be possible) method will be null so guard against it.
-            if (method != null) {
-                char firstChar = method.name().charAt(0);
-                switch (firstChar) {
-                    case 'H':
-                        // According to 4.3, RFC2616:
-                        // All responses to the HEAD request method MUST NOT include a
-                        // message-body, even though the presence of entity-header fields
-                        // might lead one to believe they do.
-                        if (HttpMethod.HEAD.equals(method)) {
-                            return true;
+            // Get the getMethod of the HTTP request that corresponds to the
+            // current response.
+            HttpMethod method = queue.poll();
 
-                            // The following code was inserted to work around the servers
-                            // that behave incorrectly.  It has been commented out
-                            // because it does not work with well behaving servers.
-                            // Please note, even if the 'Transfer-Encoding: chunked'
-                            // header exists in the HEAD response, the response should
-                            // have absolutely no content.
-                            //
-                            //// Interesting edge case:
-                            //// Some poorly implemented servers will send a zero-byte
-                            //// chunk if Transfer-Encoding of the response is 'chunked'.
-                            ////
-                            //// return !msg.isChunked();
-                        }
-                        break;
-                    case 'C':
-                        // Successful CONNECT request results in a response with empty body.
-                        if (statusCode == 200) {
-                            if (HttpMethod.CONNECT.equals(method)) {
-                                // Proxy connection established - Parse HTTP only if configured by
-                                // parseHttpAfterConnectRequest, else pass through.
-                                if (!parseHttpAfterConnectRequest) {
-                                    done = true;
-                                    queue.clear();
-                                }
-                                return true;
-                            }
-                        }
-                        break;
+            char firstChar = method.name().charAt(0);
+            switch (firstChar) {
+            case 'H':
+                // According to 4.3, RFC2616:
+                // All responses to the HEAD request method MUST NOT include a
+                // message-body, even though the presence of entity-header fields
+                // might lead one to believe they do.
+                if (HttpMethod.HEAD.equals(method)) {
+                    return true;
+
+                    // The following code was inserted to work around the servers
+                    // that behave incorrectly.  It has been commented out
+                    // because it does not work with well behaving servers.
+                    // Please note, even if the 'Transfer-Encoding: chunked'
+                    // header exists in the HEAD response, the response should
+                    // have absolutely no content.
+                    //
+                    //// Interesting edge case:
+                    //// Some poorly implemented servers will send a zero-byte
+                    //// chunk if Transfer-Encoding of the response is 'chunked'.
+                    ////
+                    //// return !msg.isChunked();
                 }
+                break;
+            case 'C':
+                // Successful CONNECT request results in a response with empty body.
+                if (statusCode == 200) {
+                    if (HttpMethod.CONNECT.equals(method)) {
+                        // Proxy connection established - Not HTTP anymore.
+                        done = true;
+                        queue.clear();
+                        return true;
+                    }
+                }
+                break;
             }
+
             return super.isContentAlwaysEmpty(msg);
         }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,16 +18,11 @@ package io.netty.channel.socket.oio;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.DatagramChannelConfig;
 
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 
-/**
- * @deprecated use NIO / EPOLL / KQUEUE transport.
- */
-@Deprecated
 public interface OioDatagramChannelConfig extends DatagramChannelConfig {
     /**
      * Sets the maximal time a operation on the underlying socket may block.
@@ -89,9 +84,6 @@ public interface OioDatagramChannelConfig extends DatagramChannelConfig {
 
     @Override
     OioDatagramChannelConfig setMessageSizeEstimator(MessageSizeEstimator estimator);
-
-    @Override
-    OioDatagramChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark);
 
     @Override
     OioDatagramChannelConfig setWriteBufferHighWaterMark(int writeBufferHighWaterMark);

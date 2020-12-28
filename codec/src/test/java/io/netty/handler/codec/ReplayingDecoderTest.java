@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -47,7 +47,7 @@ public class ReplayingDecoderTest {
         ch.writeInbound(Unpooled.wrappedBuffer(new byte[] { '\n' }));
 
         ByteBuf buf = Unpooled.wrappedBuffer(new byte[] { 'A', 'B', 'C' });
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals(buf, buf2);
 
         buf.release();
@@ -86,7 +86,7 @@ public class ReplayingDecoderTest {
         ch.writeInbound(Unpooled.wrappedBuffer(new byte[]{'C', '\n'}));
 
         ByteBuf buf = Unpooled.wrappedBuffer(new byte[] { 'A', 'B', 'C' });
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals(buf, buf2);
 
         buf.release();
@@ -114,7 +114,7 @@ public class ReplayingDecoderTest {
         ch.writeInbound(Unpooled.wrappedBuffer(new byte[]{'C', '\n' , 'B', '\n'}));
 
         ByteBuf buf  = Unpooled.wrappedBuffer(new byte[] {'C'});
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals(buf, buf2);
 
         buf.release();
@@ -126,7 +126,7 @@ public class ReplayingDecoderTest {
         ch.finish();
 
         buf  = Unpooled.wrappedBuffer(new byte[] {'B'});
-        buf2 = ch.readInbound();
+        buf2 = (ByteBuf) ch.readInbound();
         assertEquals(buf, buf2);
 
         buf.release();
@@ -151,7 +151,7 @@ public class ReplayingDecoderTest {
 
         ByteBuf buf = Unpooled.wrappedBuffer(new byte[] {'a', 'b', 'c'});
         channel.writeInbound(buf.copy());
-        ByteBuf b = channel.readInbound();
+        ByteBuf b = (ByteBuf) channel.readInbound();
         assertEquals(b, buf.skipBytes(1));
         b.release();
         buf.release();
@@ -175,7 +175,7 @@ public class ReplayingDecoderTest {
 
         ByteBuf buf = Unpooled.wrappedBuffer(new byte[] {'a', 'b', 'c'});
         channel.writeInbound(buf.copy());
-        ByteBuf b = channel.readInbound();
+        ByteBuf b = (ByteBuf) channel.readInbound();
 
         assertEquals("Expect to have still all bytes in the buffer", b, buf);
         b.release();
@@ -201,7 +201,7 @@ public class ReplayingDecoderTest {
         });
 
         channel.writeInbound(buf.copy());
-        ByteBuf b = channel.readInbound();
+        ByteBuf b = (ByteBuf) channel.readInbound();
         assertEquals(b, Unpooled.wrappedBuffer(new byte[] { 'b', 'c'}));
         b.release();
         buf.release();

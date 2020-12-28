@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,7 +17,6 @@ package io.netty.buffer;
 
 import io.netty.util.internal.PlatformDependent;
 import org.junit.Assume;
-import org.junit.Ignore;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;
@@ -33,7 +32,7 @@ import static org.junit.Assert.fail;
 public class SlicedByteBufTest extends AbstractByteBufTest {
 
     @Override
-    protected final ByteBuf newBuffer(int length, int maxCapacity) {
+    protected ByteBuf newBuffer(int length, int maxCapacity) {
         Assume.assumeTrue(maxCapacity == Integer.MAX_VALUE);
         int offset = length == 0 ? 0 : PlatformDependent.threadLocalRandom().nextInt(length);
         ByteBuf buffer = Unpooled.buffer(length * 2);
@@ -47,13 +46,7 @@ public class SlicedByteBufTest extends AbstractByteBufTest {
         return buffer.slice(offset, length);
     }
 
-    @Test
-    public void testIsContiguous() {
-        ByteBuf buf = newBuffer(4);
-        assertEquals(buf.unwrap().isContiguous(), buf.isContiguous());
-        buf.release();
-    }
-
+    @SuppressWarnings("deprecation")
     @Test(expected = NullPointerException.class)
     public void shouldNotAllowNullInConstructor() {
         new SlicedByteBuf(null, 0, 0);
@@ -143,16 +136,6 @@ public class SlicedByteBufTest extends AbstractByteBufTest {
         // Ignore for SlicedByteBuf
     }
 
-    @Ignore("Sliced ByteBuf objects don't allow the capacity to change. So this test would fail and shouldn't be run")
-    @Override
-    public void testDuplicateCapacityChange() {
-    }
-
-    @Ignore("Sliced ByteBuf objects don't allow the capacity to change. So this test would fail and shouldn't be run")
-    @Override
-    public void testRetainedDuplicateCapacityChange() {
-    }
-
     @Test
     public void testReaderIndexAndMarks() {
         ByteBuf wrapped = Unpooled.buffer(16);
@@ -161,7 +144,8 @@ public class SlicedByteBufTest extends AbstractByteBufTest {
             wrapped.readerIndex(2);
             wrapped.markWriterIndex();
             wrapped.markReaderIndex();
-            ByteBuf slice = wrapped.slice(4, 4);
+            @SuppressWarnings("deprecation")
+            ByteBuf slice = new SlicedByteBuf(wrapped, 4, 4);
             assertEquals(0, slice.readerIndex());
             assertEquals(4, slice.writerIndex());
 
@@ -212,30 +196,6 @@ public class SlicedByteBufTest extends AbstractByteBufTest {
         } finally {
             wrappedBuffer.release();
         }
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUsAsciiCharSequenceExpand() {
-        super.testWriteUsAsciiCharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUtf8CharSequenceExpand() {
-        super.testWriteUtf8CharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteIso88591CharSequenceExpand() {
-        super.testWriteIso88591CharSequenceExpand();
-    }
-
-    @Test(expected = IndexOutOfBoundsException.class)
-    @Override
-    public void testWriteUtf16CharSequenceExpand() {
-        super.testWriteUtf16CharSequenceExpand();
     }
 
     @Test

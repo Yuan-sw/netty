@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -33,10 +33,10 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketClientHandshakerFactory;
 import io.netty.handler.codec.http.websocketx.WebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketVersion;
-import io.netty.handler.codec.http.websocketx.extensions.compression.WebSocketClientCompressionHandler;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
+import io.netty.handler.ssl.util.SelfSignedCertificate;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -49,7 +49,7 @@ import java.net.URI;
  * Therefore you can either start the WebSocket server from the examples
  * by running {@link io.netty.example.http.websocketx.server.WebSocketServer}
  * or connect to an existing WebSocket server such as
- * <a href="https://www.websocket.org/echo.html">ws://echo.websocket.org</a>.
+ * <a href="http://www.websocket.org/echo.html">ws://echo.websocket.org</a>.
  * <p>
  * The client will attempt to connect to the URI passed to it as the first argument.
  * You don't have to specify any arguments if you want to connect to the example WebSocket server,
@@ -98,7 +98,7 @@ public final class WebSocketClient {
             final WebSocketClientHandler handler =
                     new WebSocketClientHandler(
                             WebSocketClientHandshakerFactory.newHandshaker(
-                                    uri, WebSocketVersion.V13, null, true, new DefaultHttpHeaders()));
+                                    uri, WebSocketVersion.V13, null, false, new DefaultHttpHeaders()));
 
             Bootstrap b = new Bootstrap();
             b.group(group)
@@ -113,7 +113,6 @@ public final class WebSocketClient {
                      p.addLast(
                              new HttpClientCodec(),
                              new HttpObjectAggregator(8192),
-                             WebSocketClientCompressionHandler.INSTANCE,
                              handler);
                  }
              });

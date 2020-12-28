@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,8 +15,8 @@
  */
 package io.netty.util;
 
-import io.netty.util.NetUtilInitializations.NetworkIfaceAndInetAddress;
 import io.netty.util.internal.PlatformDependent;
+import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.logging.InternalLogger;
@@ -25,25 +25,24 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.NetworkInterface;
+import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
-
-import static io.netty.util.AsciiString.indexOf;
+import java.util.ArrayList;
+import java.util.Enumeration;
+import java.util.List;
 
 /**
  * A class that holds a number of network-related constants.
  * <p/>
  * This class borrowed some of its methods from a  modified fork of the
- * <a href="https://svn.apache.org/repos/asf/harmony/enhanced/java/branches/java6/classlib/modules/luni/
+ * <a href="http://svn.apache.org/repos/asf/harmony/enhanced/java/branches/java6/classlib/modules/luni/
  * src/main/java/org/apache/harmony/luni/util/Inet6Util.java">Inet6Util class</a> which was part of Apache Harmony.
  */
 public final class NetUtil {
@@ -116,15 +115,9 @@ public final class NetUtil {
     private static final int IPV4_SEPARATORS = 3;
 
     /**
-     * {@code true} if IPv4 should be used even if the system supports both IPv4 and IPv6.
+     * {@code true} if ipv4 should be used on a system that supports ipv4 and ipv6.
      */
     private static final boolean IPV4_PREFERRED = SystemPropertyUtil.getBoolean("java.net.preferIPv4Stack", false);
-
-    /**
-     * {@code true} if an IPv6 address should be preferred when a host has both an IPv4 address and an IPv6 address.
-     */
-    private static final boolean IPV6_ADDRESSES_PREFERRED =
-            SystemPropertyUtil.getBoolean("java.net.preferIPv6Addresses", false);
 
     /**
      * The logger being used by this class
@@ -132,18 +125,113 @@ public final class NetUtil {
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(NetUtil.class);
 
     static {
-        logger.debug("-Djava.net.preferIPv4Stack: {}", IPV4_PREFERRED);
-        logger.debug("-Djava.net.preferIPv6Addresses: {}", IPV6_ADDRESSES_PREFERRED);
+        byte[] LOCALHOST4_BYTES = {127, 0, 0, 1};
+        byte[] LOCALHOST6_BYTES = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1};
 
         // Create IPv4 loopback address.
-        LOCALHOST4 = NetUtilInitializations.createLocalhost4();
+        Inet4Address localhost4 = null;
+        try {
+            localhost4 = (Inet4Address) InetAddress.getByAddress(LOCALHOST4_BYTES);
+        } catch (Exception e) {
+            // We should not get here as long as the length of the address is correct.
+            PlatformDependent.throwException(e);
+        }
+        LOCALHOST4 = localhost4;
 
         // Create IPv6 loopback address.
-        LOCALHOST6 = NetUtilInitializations.createLocalhost6();
+        Inet6Address localhost6 = null;
+        try {
+            localhost6 = (Inet6Address) InetAddress.getByAddress(LOCALHOST6_BYTES);
+        } catch (Exception e) {
+            // We should not get here as long as the length of the address is correct.
+            PlatformDependent.throwException(e);
+        }
+        LOCALHOST6 = localhost6;
 
-        NetworkIfaceAndInetAddress loopback = NetUtilInitializations.determineLoopback(LOCALHOST4, LOCALHOST6);
-        LOOPBACK_IF = loopback.iface();
-        LOCALHOST = loopback.address();
+        // Retrieve the list of available network interfaces.
+        List<NetworkInterface> ifaces = new ArrayList<NetworkInterface>();
+        try {
+            Enumeration<NetworkInterface> interfaces = NetworkInterface.getNetworkInterfaces();
+            if (interfaces != null) {
+                while (interfaces.hasMoreElements()) {
+                    NetworkInterface iface = interfaces.nextElement();
+                    // Use the interface with proper INET addresses only.
+                    if (SocketUtils.addressesFromNetworkInterface(iface).hasMoreElements()) {
+                        ifaces.add(iface);
+                    }
+                }
+            }
+        } catch (SocketException e) {
+            logger.warn("Failed to retrieve the list of available network interfaces", e);
+        }
+
+        // Find the first loopback interface available from its INET address (127.0.0.1 or ::1)
+        // Note that we do not use NetworkInterface.isLoopback() in the first place because it takes long time
+        // on a certain environment. (e.g. Windows with -Djava.net.preferIPv4Stack=true)
+        NetworkInterface loopbackIface = null;
+        InetAddress loopbackAddr = null;
+        loop: for (NetworkInterface iface: ifaces) {
+            for (Enumeration<InetAddress> i = SocketUtils.addressesFromNetworkInterface(iface); i.hasMoreElements();) {
+                InetAddress addr = i.nextElement();
+                if (addr.isLoopbackAddress()) {
+                    // Found
+                    loopbackIface = iface;
+                    loopbackAddr = addr;
+                    break loop;
+                }
+            }
+        }
+
+        // If failed to find the loopback interface from its INET address, fall back to isLoopback().
+        if (loopbackIface == null) {
+            try {
+                for (NetworkInterface iface: ifaces) {
+                    if (iface.isLoopback()) {
+                        Enumeration<InetAddress> i = SocketUtils.addressesFromNetworkInterface(iface);
+                        if (i.hasMoreElements()) {
+                            // Found the one with INET address.
+                            loopbackIface = iface;
+                            loopbackAddr = i.nextElement();
+                            break;
+                        }
+                    }
+                }
+
+                if (loopbackIface == null) {
+                    logger.warn("Failed to find the loopback interface");
+                }
+            } catch (SocketException e) {
+                logger.warn("Failed to find the loopback interface", e);
+            }
+        }
+
+        if (loopbackIface != null) {
+            // Found the loopback interface with an INET address.
+            logger.debug(
+                    "Loopback interface: {} ({}, {})",
+                    loopbackIface.getName(), loopbackIface.getDisplayName(), loopbackAddr.getHostAddress());
+        } else {
+            // Could not find the loopback interface, but we can't leave LOCALHOST as null.
+            // Use LOCALHOST6 or LOCALHOST4, preferably the IPv6 one.
+            if (loopbackAddr == null) {
+                try {
+                    if (NetworkInterface.getByInetAddress(LOCALHOST6) != null) {
+                        logger.debug("Using hard-coded IPv6 localhost address: {}", localhost6);
+                        loopbackAddr = localhost6;
+                    }
+                } catch (Exception e) {
+                    // Ignore
+                } finally {
+                    if (loopbackAddr == null) {
+                        logger.debug("Using hard-coded IPv4 localhost address: {}", localhost4);
+                        loopbackAddr = localhost4;
+                    }
+                }
+            }
+        }
+
+        LOOPBACK_IF = loopbackIface;
+        LOCALHOST = loopbackAddr;
 
         // As a SecurityManager may prevent reading the somaxconn file we wrap this in a privileged block.
         //
@@ -169,30 +257,12 @@ public final class NetUtil {
                             logger.debug("{}: {}", file, somaxconn);
                         }
                     } else {
-                        // Try to get from sysctl
-                        Integer tmp = null;
-                        if (SystemPropertyUtil.getBoolean("io.netty.net.somaxconn.trySysctl", false)) {
-                            tmp = sysctlGetInt("kern.ipc.somaxconn");
-                            if (tmp == null) {
-                                tmp = sysctlGetInt("kern.ipc.soacceptqueue");
-                                if (tmp != null) {
-                                    somaxconn = tmp;
-                                }
-                            } else {
-                                somaxconn = tmp;
-                            }
-                        }
-
-                        if (tmp == null) {
-                            logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}", file,
-                                         somaxconn);
+                        if (logger.isDebugEnabled()) {
+                            logger.debug("{}: {} (non-existent)", file, somaxconn);
                         }
                     }
                 } catch (Exception e) {
-                    if (logger.isDebugEnabled()) {
-                        logger.debug("Failed to get SOMAXCONN from sysctl and file {}. Default: {}",
-                                file, somaxconn, e);
-                    }
+                    logger.debug("Failed to get SOMAXCONN from: {}", file, e);
                 } finally {
                     if (in != null) {
                         try {
@@ -208,58 +278,10 @@ public final class NetUtil {
     }
 
     /**
-     * This will execute <a href ="https://www.freebsd.org/cgi/man.cgi?sysctl(8)">sysctl</a> with the {@code sysctlKey}
-     * which is expected to return the numeric value for for {@code sysctlKey}.
-     * @param sysctlKey The key which the return value corresponds to.
-     * @return The <a href ="https://www.freebsd.org/cgi/man.cgi?sysctl(8)">sysctl</a> value for {@code sysctlKey}.
-     */
-    private static Integer sysctlGetInt(String sysctlKey) throws IOException {
-        Process process = new ProcessBuilder("sysctl", sysctlKey).start();
-        try {
-            // Suppress warnings about resource leaks since the buffered reader is closed below
-            InputStream is = process.getInputStream();  // lgtm[java/input-resource-leak
-            InputStreamReader isr = new InputStreamReader(is);  // lgtm[java/input-resource-leak
-            BufferedReader br = new BufferedReader(isr);
-            try {
-                String line = br.readLine();
-                if (line != null && line.startsWith(sysctlKey)) {
-                    for (int i = line.length() - 1; i > sysctlKey.length(); --i) {
-                        if (!Character.isDigit(line.charAt(i))) {
-                            return Integer.valueOf(line.substring(i + 1));
-                        }
-                    }
-                }
-                return null;
-            } finally {
-                br.close();
-            }
-        } finally {
-            if (process != null) {
-                process.destroy();
-            }
-        }
-    }
-
-    /**
-     * Returns {@code true} if IPv4 should be used even if the system supports both IPv4 and IPv6. Setting this
-     * property to {@code true} will disable IPv6 support. The default value of this property is {@code false}.
-     *
-     * @see <a href="https://docs.oracle.com/javase/8/docs/api/java/net/doc-files/net-properties.html">Java SE
-     *      networking properties</a>
+     * Returns {@code true} if ipv4 should be prefered on a system that supports ipv4 and ipv6.
      */
     public static boolean isIpV4StackPreferred() {
         return IPV4_PREFERRED;
-    }
-
-    /**
-     * Returns {@code true} if an IPv6 address should be preferred when a host has both an IPv4 address and an IPv6
-     * address. The default value of this property is {@code false}.
-     *
-     * @see <a href="https://docs.oracle.com/javase/8/docs/api/java/net/doc-files/net-properties.html">Java SE
-     *      networking properties</a>
-     */
-    public static boolean isIpV6AddressesPreferred() {
-        return IPV6_ADDRESSES_PREFERRED;
     }
 
     /**
@@ -315,73 +337,7 @@ public final class NetUtil {
         };
     }
 
-    /**
-     * Convert {@link Inet4Address} into {@code int}
-     */
-    public static int ipv4AddressToInt(Inet4Address ipAddress) {
-        byte[] octets = ipAddress.getAddress();
-
-        return  (octets[0] & 0xff) << 24 |
-                (octets[1] & 0xff) << 16 |
-                (octets[2] & 0xff) << 8 |
-                 octets[3] & 0xff;
-    }
-
-    /**
-     * Converts a 32-bit integer into an IPv4 address.
-     */
-    public static String intToIpAddress(int i) {
-        StringBuilder buf = new StringBuilder(15);
-        buf.append(i >> 24 & 0xff);
-        buf.append('.');
-        buf.append(i >> 16 & 0xff);
-        buf.append('.');
-        buf.append(i >> 8 & 0xff);
-        buf.append('.');
-        buf.append(i & 0xff);
-        return buf.toString();
-    }
-
-    /**
-     * Converts 4-byte or 16-byte data into an IPv4 or IPv6 string respectively.
-     *
-     * @throws IllegalArgumentException
-     *         if {@code length} is not {@code 4} nor {@code 16}
-     */
-    public static String bytesToIpAddress(byte[] bytes) {
-        return bytesToIpAddress(bytes, 0, bytes.length);
-    }
-
-    /**
-     * Converts 4-byte or 16-byte data into an IPv4 or IPv6 string respectively.
-     *
-     * @throws IllegalArgumentException
-     *         if {@code length} is not {@code 4} nor {@code 16}
-     */
-    public static String bytesToIpAddress(byte[] bytes, int offset, int length) {
-        switch (length) {
-            case 4: {
-                return new StringBuilder(15)
-                        .append(bytes[offset] & 0xff)
-                        .append('.')
-                        .append(bytes[offset + 1] & 0xff)
-                        .append('.')
-                        .append(bytes[offset + 2] & 0xff)
-                        .append('.')
-                        .append(bytes[offset + 3] & 0xff).toString();
-            }
-            case 16:
-                return toAddressString(bytes, offset, false);
-            default:
-                throw new IllegalArgumentException("length: " + length + " (expected: 4 or 16)");
-        }
-    }
-
     public static boolean isValidIpV6Address(String ip) {
-        return isValidIpV6Address((CharSequence) ip);
-    }
-
-    public static boolean isValidIpV6Address(CharSequence ip) {
         int end = ip.length();
         if (end < 2) {
             return false;
@@ -430,64 +386,64 @@ public final class NetUtil {
             }
 
             switch (c) {
-            case ':':
-                if (colons > 7) {
+                case ':':
+                    if (colons > 7) {
+                        return false;
+                    }
+                    if (ip.charAt(i - 1) == ':') {
+                        if (compressBegin >= 0) {
+                            return false;
+                        }
+                        compressBegin = i - 1;
+                    } else {
+                        wordLen = 0;
+                    }
+                    colons++;
+                    break;
+                case '.':
+                    // case for the last 32-bits represented as IPv4 x:x:x:x:x:x:d.d.d.d
+
+                    // check a normal case (6 single colons)
+                    if (compressBegin < 0 && colons != 6 ||
+                        // a special case ::1:2:3:4:5:d.d.d.d allows 7 colons with an
+                        // IPv4 ending, otherwise 7 :'s is bad
+                        (colons == 7 && compressBegin >= start || colons > 7)) {
+                        return false;
+                    }
+
+                    // Verify this address is of the correct structure to contain an IPv4 address.
+                    // It must be IPv4-Mapped or IPv4-Compatible
+                    // (see https://tools.ietf.org/html/rfc4291#section-2.5.5).
+                    int ipv4Start = i - wordLen;
+                    int j = ipv4Start - 2; // index of character before the previous ':'.
+                    if (isValidIPv4MappedChar(ip.charAt(j))) {
+                        if (!isValidIPv4MappedChar(ip.charAt(j - 1)) ||
+                            !isValidIPv4MappedChar(ip.charAt(j - 2)) ||
+                            !isValidIPv4MappedChar(ip.charAt(j - 3))) {
+                            return false;
+                        }
+                        j -= 5;
+                    }
+
+                    for (; j >= start; --j) {
+                        char tmpChar = ip.charAt(j);
+                        if (tmpChar != '0' && tmpChar != ':') {
+                            return false;
+                        }
+                    }
+
+                    // 7 - is minimum IPv4 address length
+                    int ipv4End = ip.indexOf('%', ipv4Start + 7);
+                    if (ipv4End < 0) {
+                        ipv4End = end;
+                    }
+                    return isValidIpV4Address(ip, ipv4Start, ipv4End);
+                case '%':
+                    // strip the interface name/index after the percent sign
+                    end = i;
+                    break loop;
+                default:
                     return false;
-                }
-                if (ip.charAt(i - 1) == ':') {
-                    if (compressBegin >= 0) {
-                        return false;
-                    }
-                    compressBegin = i - 1;
-                } else {
-                    wordLen = 0;
-                }
-                colons++;
-                break;
-            case '.':
-                // case for the last 32-bits represented as IPv4 x:x:x:x:x:x:d.d.d.d
-
-                // check a normal case (6 single colons)
-                if (compressBegin < 0 && colons != 6 ||
-                    // a special case ::1:2:3:4:5:d.d.d.d allows 7 colons with an
-                    // IPv4 ending, otherwise 7 :'s is bad
-                    (colons == 7 && compressBegin >= start || colons > 7)) {
-                    return false;
-                }
-
-                // Verify this address is of the correct structure to contain an IPv4 address.
-                // It must be IPv4-Mapped or IPv4-Compatible
-                // (see https://tools.ietf.org/html/rfc4291#section-2.5.5).
-                int ipv4Start = i - wordLen;
-                int j = ipv4Start - 2; // index of character before the previous ':'.
-                if (isValidIPv4MappedChar(ip.charAt(j))) {
-                    if (!isValidIPv4MappedChar(ip.charAt(j - 1)) ||
-                        !isValidIPv4MappedChar(ip.charAt(j - 2)) ||
-                        !isValidIPv4MappedChar(ip.charAt(j - 3))) {
-                        return false;
-                    }
-                    j -= 5;
-                }
-
-                for (; j >= start; --j) {
-                    char tmpChar = ip.charAt(j);
-                    if (tmpChar != '0' && tmpChar != ':') {
-                        return false;
-                    }
-                }
-
-                // 7 - is minimum IPv4 address length
-                int ipv4End = indexOf(ip, '%', ipv4Start + 7);
-                if (ipv4End < 0) {
-                    ipv4End = end;
-                }
-                return isValidIpV4Address(ip, ipv4Start, ipv4End);
-            case '%':
-                // strip the interface name/index after the percent sign
-                end = i;
-                break loop;
-            default:
-                return false;
             }
         }
 
@@ -497,8 +453,8 @@ public final class NetUtil {
         }
 
         return compressBegin + 2 == end ||
-               // 8 colons is valid only if compression in start or end
-               wordLen > 0 && (colons < 8 || compressBegin <= start);
+                // 8 colons is valid only if compression in start or end
+                wordLen > 0 && (colons < 8 || compressBegin <= start);
     }
 
     private static boolean isValidIpV4Word(CharSequence word, int from, int toExclusive) {
@@ -543,17 +499,7 @@ public final class NetUtil {
     }
 
     /**
-     * Takes a {@link CharSequence} and parses it to see if it is a valid IPV4 address.
-     *
-     * @return true, if the string represents an IPV4 address in dotted
-     *         notation, false otherwise
-     */
-    public static boolean isValidIpV4Address(CharSequence ip) {
-        return isValidIpV4Address(ip, 0, ip.length());
-    }
-
-    /**
-     * Takes a {@link String} and parses it to see if it is a valid IPV4 address.
+     * Takes a string and parses it to see if it is a valid IPV4 address.
      *
      * @return true, if the string represents an IPV4 address in dotted
      *         notation, false otherwise
@@ -562,43 +508,15 @@ public final class NetUtil {
         return isValidIpV4Address(ip, 0, ip.length());
     }
 
-    private static boolean isValidIpV4Address(CharSequence ip, int from, int toExcluded) {
-        return ip instanceof String ? isValidIpV4Address((String) ip, from, toExcluded) :
-                ip instanceof AsciiString ? isValidIpV4Address((AsciiString) ip, from, toExcluded) :
-                        isValidIpV4Address0(ip, from, toExcluded);
-    }
-
     @SuppressWarnings("DuplicateBooleanBranch")
     private static boolean isValidIpV4Address(String ip, int from, int toExcluded) {
         int len = toExcluded - from;
         int i;
         return len <= 15 && len >= 7 &&
-                (i = ip.indexOf('.', from + 1)) > 0 && isValidIpV4Word(ip, from, i) &&
-                (i =  ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                (i =  ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                isValidIpV4Word(ip, i + 1, toExcluded);
-    }
-
-    @SuppressWarnings("DuplicateBooleanBranch")
-    private static boolean isValidIpV4Address(AsciiString ip, int from, int toExcluded) {
-        int len = toExcluded - from;
-        int i;
-        return len <= 15 && len >= 7 &&
-                (i = ip.indexOf('.', from + 1)) > 0 && isValidIpV4Word(ip, from, i) &&
-                (i =  ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                (i =  ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                isValidIpV4Word(ip, i + 1, toExcluded);
-    }
-
-    @SuppressWarnings("DuplicateBooleanBranch")
-    private static boolean isValidIpV4Address0(CharSequence ip, int from, int toExcluded) {
-        int len = toExcluded - from;
-        int i;
-        return len <= 15 && len >= 7 &&
-                (i = indexOf(ip, '.', from + 1)) > 0 && isValidIpV4Word(ip, from, i) &&
-                (i =  indexOf(ip, '.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                (i =  indexOf(ip, '.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
-                isValidIpV4Word(ip, i + 1, toExcluded);
+               (i = ip.indexOf('.', from + 1)) > 0 && isValidIpV4Word(ip, from, i) &&
+               (i = ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
+               (i = ip.indexOf('.', from = i + 2)) > 0 && isValidIpV4Word(ip, from - 1, i) &&
+               isValidIpV4Word(ip, i + 1, toExcluded);
     }
 
     /**
@@ -617,7 +535,7 @@ public final class NetUtil {
      * <p>
      * The {@code ipv4Mapped} parameter specifies how IPv4 addresses should be treated.
      * "IPv4 mapped" format as
-     * defined in <a href="https://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> is supported.
+     * defined in <a href="http://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> is supported.
      * @param ip {@link CharSequence} IP address to be converted to a {@link Inet6Address}
      * @param ipv4Mapped
      * <ul>
@@ -643,7 +561,7 @@ public final class NetUtil {
      * <p>
      * The {@code ipv4Mapped} parameter specifies how IPv4 addresses should be treated.
      * "IPv4 mapped" format as
-     * defined in <a href="https://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> is supported.
+     * defined in <a href="http://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> is supported.
      * @param ip {@link CharSequence} IP address to be converted to a {@link Inet6Address}
      * @param ipv4Mapped
      * <ul>
@@ -855,8 +773,8 @@ public final class NetUtil {
         final StringBuilder sb;
 
         if (addr.isUnresolved()) {
-            String hostname = getHostname(addr);
-            sb = newSocketAddressStringBuilder(hostname, port, !isValidIpV6Address(hostname));
+            String hostString = PlatformDependent.javaVersion() >= 7 ? addr.getHostString() : addr.getHostName();
+            sb = newSocketAddressStringBuilder(hostString, port, !isValidIpV6Address(hostString));
         } else {
             InetAddress address = addr.getAddress();
             String hostString = toAddressString(address);
@@ -893,7 +811,7 @@ public final class NetUtil {
      * <ul>
      * <li>Inet4Address results are identical to {@link InetAddress#getHostAddress()}</li>
      * <li>Inet6Address results adhere to
-     * <a href="https://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
+     * <a href="http://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
      * </ul>
      * <p>
      * The output does not include Scope ID.
@@ -909,11 +827,11 @@ public final class NetUtil {
      * <ul>
      * <li>Inet4Address results are identical to {@link InetAddress#getHostAddress()}</li>
      * <li>Inet6Address results adhere to
-     * <a href="https://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a> if
+     * <a href="http://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a> if
      * {@code ipv4Mapped} is false.  If {@code ipv4Mapped} is true then "IPv4 mapped" format
-     * from <a href="https://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> will be supported.
+     * from <a href="http://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> will be supported.
      * The compressed result will always obey the compression rules defined in
-     * <a href="https://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
+     * <a href="http://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
      * </ul>
      * <p>
      * The output does not include Scope ID.
@@ -921,9 +839,9 @@ public final class NetUtil {
      * @param ipv4Mapped
      * <ul>
      * <li>{@code true} to stray from strict rfc 5952 and support the "IPv4 mapped" format
-     * defined in <a href="https://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> while still
+     * defined in <a href="http://tools.ietf.org/html/rfc4291#section-2.5.5">rfc 4291 section 2</a> while still
      * following the updated guidelines in
-     * <a href="https://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
+     * <a href="http://tools.ietf.org/html/rfc5952#section-4">rfc 5952 section 4</a></li>
      * <li>{@code false} to strictly follow rfc 5952</li>
      * </ul>
      * @return {@code String} containing the text-formatted IP address
@@ -933,17 +851,13 @@ public final class NetUtil {
             return ip.getHostAddress();
         }
         if (!(ip instanceof Inet6Address)) {
-            throw new IllegalArgumentException("Unhandled type: " + ip);
+            throw new IllegalArgumentException("Unhandled type: " + ip.getClass());
         }
 
-        return toAddressString(ip.getAddress(), 0, ipv4Mapped);
-    }
-
-    private static String toAddressString(byte[] bytes, int offset, boolean ipv4Mapped) {
+        final byte[] bytes = ip.getAddress();
         final int[] words = new int[IPV6_WORD_COUNT];
         int i;
-        final int end = offset + words.length;
-        for (i = offset; i < end; ++i) {
+        for (i = 0; i < words.length; ++i) {
             words[i] = ((bytes[i << 1] & 0xff) << 8) | (bytes[(i << 1) + 1] & 0xff);
         }
 
@@ -1024,16 +938,6 @@ public final class NetUtil {
         }
 
         return b.toString();
-    }
-
-    /**
-     * Returns {@link InetSocketAddress#getHostString()} if Java >= 7,
-     * or {@link InetSocketAddress#getHostName()} otherwise.
-     * @param addr The address
-     * @return the host string
-     */
-    public static String getHostname(InetSocketAddress addr) {
-        return PlatformDependent.javaVersion() >= 7 ? addr.getHostString() : addr.getHostName();
     }
 
     /**

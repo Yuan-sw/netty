@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,10 +18,9 @@ package io.netty.handler.codec.spdy;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.codec.MessageToMessageCodec;
 import io.netty.handler.codec.http.HttpMessage;
-import io.netty.handler.codec.spdy.SpdyHttpHeaders.Names;
 import io.netty.util.ReferenceCountUtil;
 
-import java.util.ArrayDeque;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
@@ -33,7 +32,7 @@ import java.util.Queue;
 public class SpdyHttpResponseStreamIdHandler extends
         MessageToMessageCodec<Object, HttpMessage> {
     private static final Integer NO_ID = -1;
-    private final Queue<Integer> ids = new ArrayDeque<Integer>();
+    private final Queue<Integer> ids = new LinkedList<Integer>();
 
     @Override
     public boolean acceptInboundMessage(Object msg) throws Exception {
@@ -44,7 +43,7 @@ public class SpdyHttpResponseStreamIdHandler extends
     protected void encode(ChannelHandlerContext ctx, HttpMessage msg, List<Object> out) throws Exception {
         Integer id = ids.poll();
         if (id != null && id.intValue() != NO_ID && !msg.headers().contains(SpdyHttpHeaders.Names.STREAM_ID)) {
-            msg.headers().setInt(Names.STREAM_ID, id);
+            SpdyHttpHeaders.setStreamId(msg, id);
         }
 
         out.add(ReferenceCountUtil.retain(msg));
@@ -57,7 +56,7 @@ public class SpdyHttpResponseStreamIdHandler extends
             if (!contains) {
                 ids.add(NO_ID);
             } else {
-                ids.add(((HttpMessage) msg).headers().getInt(Names.STREAM_ID));
+                ids.add(SpdyHttpHeaders.getStreamId((HttpMessage) msg));
             }
         } else if (msg instanceof SpdyRstStreamFrame) {
             ids.remove(((SpdyRstStreamFrame) msg).streamId());

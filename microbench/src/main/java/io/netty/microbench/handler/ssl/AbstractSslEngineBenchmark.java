@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,7 +15,7 @@
  */
 package io.netty.microbench.handler.ssl;
 
-import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.SslContextBuilder;
 import io.netty.handler.ssl.SslProvider;
@@ -25,11 +25,11 @@ import io.netty.util.ReferenceCountUtil;
 import io.netty.util.internal.PlatformDependent;
 import org.openjdk.jmh.annotations.Param;
 
-import java.io.File;
-import java.nio.ByteBuffer;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import java.io.File;
+import java.nio.ByteBuffer;
 
 
 public class AbstractSslEngineBenchmark extends AbstractMicrobenchmark {
@@ -82,12 +82,12 @@ public class AbstractSslEngineBenchmark extends AbstractMicrobenchmark {
             }
         }
 
-        SSLEngine newClientEngine(ByteBufAllocator allocator, String cipher) {
-            return configureEngine(clientContext.newHandler(allocator).engine(), cipher);
+        SSLEngine newClientEngine(String cipher) {
+            return configureEngine(clientContext.newEngine(PooledByteBufAllocator.DEFAULT), cipher);
         }
 
-        SSLEngine newServerEngine(ByteBufAllocator allocator, String cipher) {
-            return configureEngine(serverContext.newHandler(allocator).engine(), cipher);
+        SSLEngine newServerEngine(String cipher) {
+            return configureEngine(serverContext.newEngine(PooledByteBufAllocator.DEFAULT), cipher);
         }
 
         abstract SslProvider sslProvider();
@@ -142,9 +142,9 @@ public class AbstractSslEngineBenchmark extends AbstractMicrobenchmark {
     private ByteBuffer clientAppReadBuffer;
     private ByteBuffer empty;
 
-    protected final void initEngines(ByteBufAllocator allocator) {
-        clientEngine = newClientEngine(allocator);
-        serverEngine = newServerEngine(allocator);
+    protected final void initEngines() {
+        clientEngine = newClientEngine();
+        serverEngine = newServerEngine();
     }
 
     protected final void destroyEngines() {
@@ -241,15 +241,15 @@ public class AbstractSslEngineBenchmark extends AbstractMicrobenchmark {
                 serverResult.getStatus() == SSLEngineResult.Status.OK;
     }
 
-    protected final SSLEngine newClientEngine(ByteBufAllocator allocator) {
-        return sslProvider.newClientEngine(allocator, cipher);
+    protected final SSLEngine newClientEngine() {
+        return sslProvider.newClientEngine(cipher);
     }
 
-    protected final SSLEngine newServerEngine(ByteBufAllocator allocator) {
-        return sslProvider.newServerEngine(allocator, cipher);
+    protected final SSLEngine newServerEngine() {
+        return sslProvider.newServerEngine(cipher);
     }
 
-    static boolean checkSslEngineResult(SSLEngineResult result, ByteBuffer src, ByteBuffer dst) {
+    protected static boolean checkSslEngineResult(SSLEngineResult result, ByteBuffer src, ByteBuffer dst) {
         return result.getStatus() == SSLEngineResult.Status.OK && !src.hasRemaining() && dst.hasRemaining();
     }
 

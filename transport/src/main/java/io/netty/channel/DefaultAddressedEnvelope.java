@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,7 +18,6 @@ package io.netty.channel;
 
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.ReferenceCounted;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.StringUtil;
 
 import java.net.SocketAddress;
@@ -40,9 +39,8 @@ public class DefaultAddressedEnvelope<M, A extends SocketAddress> implements Add
      * {@code sender} address.
      */
     public DefaultAddressedEnvelope(M message, A recipient, A sender) {
-        ObjectUtil.checkNotNull(message, "message");
-        if (recipient == null && sender == null) {
-            throw new NullPointerException("recipient and sender");
+        if (message == null) {
+            throw new NullPointerException("message");
         }
 
         this.message = message;
@@ -102,18 +100,6 @@ public class DefaultAddressedEnvelope<M, A extends SocketAddress> implements Add
     @Override
     public boolean release(int decrement) {
         return ReferenceCountUtil.release(message, decrement);
-    }
-
-    @Override
-    public AddressedEnvelope<M, A> touch() {
-        ReferenceCountUtil.touch(message);
-        return this;
-    }
-
-    @Override
-    public AddressedEnvelope<M, A> touch(Object hint) {
-        ReferenceCountUtil.touch(message, hint);
-        return this;
     }
 
     @Override

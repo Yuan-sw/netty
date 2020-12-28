@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannelConfig;
 
 /**
@@ -39,10 +38,7 @@ import io.netty.channel.socket.SocketChannelConfig;
  * <td>{@link ChannelOption#SO_TIMEOUT}</td><td>{@link #setSoTimeout(int)}</td>
  * </tr>
  * </table>
- *
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
 public interface OioSocketChannelConfig extends SocketChannelConfig {
 
     /**
@@ -86,7 +82,6 @@ public interface OioSocketChannelConfig extends SocketChannelConfig {
     OioSocketChannelConfig setConnectTimeoutMillis(int connectTimeoutMillis);
 
     @Override
-    @Deprecated
     OioSocketChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead);
 
     @Override
@@ -109,9 +104,6 @@ public interface OioSocketChannelConfig extends SocketChannelConfig {
 
     @Override
     OioSocketChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark);
-
-    @Override
-    OioSocketChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark);
 
     @Override
     OioSocketChannelConfig setMessageSizeEstimator(MessageSizeEstimator estimator);

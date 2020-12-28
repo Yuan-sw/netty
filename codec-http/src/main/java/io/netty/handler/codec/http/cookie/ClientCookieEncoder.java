@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -31,8 +31,11 @@ import java.util.Iterator;
 import java.util.List;
 
 /**
- * A <a href="https://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie encoder to be used client side, so
+ * A <a href="http://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie encoder to be used client side, so
  * only name=value pairs are sent.
+ *
+ * User-Agents are not supposed to interpret cookies, so, if present, {@link Cookie#rawValue()} will be used.
+ * Otherwise, {@link Cookie#value()} will be used unquoted.
  *
  * Note that multiple cookies are supposed to be sent at once in a single "Cookie" header.
  *
@@ -78,7 +81,8 @@ public final class ClientCookieEncoder extends CookieEncoder {
     /**
      * Encodes the specified cookie into a Cookie header value.
      *
-     * @param cookie the specified cookie
+     * @param specified
+     *            the cookie
      * @return a Rfc6265 style Cookie header value
      */
     public String encode(Cookie cookie) {
@@ -91,8 +95,7 @@ public final class ClientCookieEncoder extends CookieEncoder {
      * Sort cookies into decreasing order of path length, breaking ties by sorting into increasing chronological
      * order of creation time, as recommended by RFC 6265.
      */
-    // package-private for testing only.
-    static final Comparator<Cookie> COOKIE_COMPARATOR = new Comparator<Cookie>() {
+    private static final Comparator<Cookie> COOKIE_COMPARATOR = new Comparator<Cookie>() {
         @Override
         public int compare(Cookie c1, Cookie c2) {
             String path1 = c1.path();
@@ -104,10 +107,13 @@ public final class ClientCookieEncoder extends CookieEncoder {
             // limited use.
             int len1 = path1 == null ? Integer.MAX_VALUE : path1.length();
             int len2 = path2 == null ? Integer.MAX_VALUE : path2.length();
-
-            // Rely on Arrays.sort's stability to retain creation order in cases where
+            int diff = len2 - len1;
+            if (diff != 0) {
+                return diff;
+            }
+            // Rely on Java's sort stability to retain creation order in cases where
             // cookies have same path length.
-            return len2 - len1;
+            return -1;
         }
     };
 
@@ -159,7 +165,7 @@ public final class ClientCookieEncoder extends CookieEncoder {
             if (cookies.size() == 1) {
                 encode(buf, cookies.iterator().next());
             } else {
-                Cookie[] cookiesSorted = cookies.toArray(new Cookie[0]);
+                Cookie[] cookiesSorted = cookies.toArray(new Cookie[cookies.size()]);
                 Arrays.sort(cookiesSorted, COOKIE_COMPARATOR);
                 for (Cookie c : cookiesSorted) {
                     encode(buf, c);
@@ -196,7 +202,7 @@ public final class ClientCookieEncoder extends CookieEncoder {
                 while (cookiesIt.hasNext()) {
                     cookiesList.add(cookiesIt.next());
                 }
-                Cookie[] cookiesSorted = cookiesList.toArray(new Cookie[0]);
+                Cookie[] cookiesSorted = cookiesList.toArray(new Cookie[cookiesList.size()]);
                 Arrays.sort(cookiesSorted, COOKIE_COMPARATOR);
                 for (Cookie c : cookiesSorted) {
                     encode(buf, c);

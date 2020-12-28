@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,9 +17,6 @@ package io.netty.handler.logging;
 
 import io.netty.util.internal.logging.InternalLogLevel;
 
-/**
- * Maps the regular {@link LogLevel}s with the {@link InternalLogLevel} ones.
- */
 public enum LogLevel {
     TRACE(InternalLogLevel.TRACE),
     DEBUG(InternalLogLevel.DEBUG),
@@ -33,14 +30,7 @@ public enum LogLevel {
         this.internalLevel = internalLevel;
     }
 
-    /**
-     * For internal use only.
-     *
-     * <p/>Converts the specified {@link LogLevel} to its {@link InternalLogLevel} variant.
-     *
-     * @return the converted level.
-     */
-    public InternalLogLevel toInternalLevel() {
+    InternalLogLevel toInternalLevel() {
         return internalLevel;
     }
 }

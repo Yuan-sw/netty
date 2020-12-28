@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,37 +15,18 @@
  */
 package io.netty.handler.codec.http.websocketx;
 
-import io.netty.handler.codec.http.HttpHeaderNames;
 import io.netty.handler.codec.http.HttpHeaders;
 
 import java.net.URI;
 
 public class WebSocketClientHandshaker00Test extends WebSocketClientHandshakerTest {
     @Override
-    protected WebSocketClientHandshaker newHandshaker(URI uri, String subprotocol, HttpHeaders headers,
-                                                      boolean absoluteUpgradeUrl) {
-        return new WebSocketClientHandshaker00(uri, WebSocketVersion.V00, subprotocol, headers,
-          1024, 10000, absoluteUpgradeUrl);
+    protected WebSocketClientHandshaker newHandshaker(URI uri) {
+        return new WebSocketClientHandshaker00(uri, WebSocketVersion.V00, null, null, 1024);
     }
 
     @Override
     protected CharSequence getOriginHeaderName() {
-        return HttpHeaderNames.ORIGIN;
-    }
-
-    @Override
-    protected CharSequence getProtocolHeaderName() {
-        return HttpHeaderNames.SEC_WEBSOCKET_PROTOCOL;
-    }
-
-    @Override
-    protected CharSequence[] getHandshakeRequiredHeaderNames() {
-        return new CharSequence[] {
-                HttpHeaderNames.CONNECTION,
-                HttpHeaderNames.UPGRADE,
-                HttpHeaderNames.HOST,
-                HttpHeaderNames.SEC_WEBSOCKET_KEY1,
-                HttpHeaderNames.SEC_WEBSOCKET_KEY2,
-        };
+        return HttpHeaders.Names.ORIGIN;
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,58 +18,40 @@ package io.netty.example.socksproxy;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.socksx.SocksMessage;
-import io.netty.handler.codec.socksx.v4.Socks4CommandRequest;
-import io.netty.handler.codec.socksx.v4.Socks4CommandType;
-import io.netty.handler.codec.socksx.v5.DefaultSocks5InitialResponse;
-import io.netty.handler.codec.socksx.v5.DefaultSocks5PasswordAuthResponse;
-import io.netty.handler.codec.socksx.v5.Socks5AuthMethod;
-import io.netty.handler.codec.socksx.v5.Socks5InitialRequest;
-import io.netty.handler.codec.socksx.v5.Socks5CommandRequest;
-import io.netty.handler.codec.socksx.v5.Socks5CommandRequestDecoder;
-import io.netty.handler.codec.socksx.v5.Socks5CommandType;
-import io.netty.handler.codec.socksx.v5.Socks5PasswordAuthRequest;
-import io.netty.handler.codec.socksx.v5.Socks5PasswordAuthStatus;
+import io.netty.handler.codec.socks.SocksAuthResponse;
+import io.netty.handler.codec.socks.SocksAuthScheme;
+import io.netty.handler.codec.socks.SocksAuthStatus;
+import io.netty.handler.codec.socks.SocksCmdRequest;
+import io.netty.handler.codec.socks.SocksCmdRequestDecoder;
+import io.netty.handler.codec.socks.SocksCmdType;
+import io.netty.handler.codec.socks.SocksInitResponse;
+import io.netty.handler.codec.socks.SocksRequest;
+
 
 @ChannelHandler.Sharable
-public final class SocksServerHandler extends SimpleChannelInboundHandler<SocksMessage> {
-
-    public static final SocksServerHandler INSTANCE = new SocksServerHandler();
-
-    private SocksServerHandler() { }
+public final class SocksServerHandler extends SimpleChannelInboundHandler<SocksRequest> {
 
     @Override
-    public void channelRead0(ChannelHandlerContext ctx, SocksMessage socksRequest) throws Exception {
-        switch (socksRequest.version()) {
-            case SOCKS4a:
-                Socks4CommandRequest socksV4CmdRequest = (Socks4CommandRequest) socksRequest;
-                if (socksV4CmdRequest.type() == Socks4CommandType.CONNECT) {
+    public void channelRead0(ChannelHandlerContext ctx, SocksRequest socksRequest) throws Exception {
+        switch (socksRequest.requestType()) {
+            case INIT: {
+                // auth support example
+                //ctx.pipeline().addFirst(new SocksAuthRequestDecoder());
+                //ctx.write(new SocksInitResponse(SocksAuthScheme.AUTH_PASSWORD));
+                ctx.pipeline().addFirst(new SocksCmdRequestDecoder());
+                ctx.write(new SocksInitResponse(SocksAuthScheme.NO_AUTH));
+                break;
+            }
+            case AUTH:
+                ctx.pipeline().addFirst(new SocksCmdRequestDecoder());
+                ctx.write(new SocksAuthResponse(SocksAuthStatus.SUCCESS));
+                break;
+            case CMD:
+                SocksCmdRequest req = (SocksCmdRequest) socksRequest;
+                if (req.cmdType() == SocksCmdType.CONNECT) {
                     ctx.pipeline().addLast(new SocksServerConnectHandler());
                     ctx.pipeline().remove(this);
                     ctx.fireChannelRead(socksRequest);
-                } else {
-                    ctx.close();
-                }
-                break;
-            case SOCKS5:
-                if (socksRequest instanceof Socks5InitialRequest) {
-                    // auth support example
-                    //ctx.pipeline().addFirst(new Socks5PasswordAuthRequestDecoder());
-                    //ctx.write(new DefaultSocks5AuthMethodResponse(Socks5AuthMethod.PASSWORD));
-                    ctx.pipeline().addFirst(new Socks5CommandRequestDecoder());
-                    ctx.write(new DefaultSocks5InitialResponse(Socks5AuthMethod.NO_AUTH));
-                } else if (socksRequest instanceof Socks5PasswordAuthRequest) {
-                    ctx.pipeline().addFirst(new Socks5CommandRequestDecoder());
-                    ctx.write(new DefaultSocks5PasswordAuthResponse(Socks5PasswordAuthStatus.SUCCESS));
-                } else if (socksRequest instanceof Socks5CommandRequest) {
-                    Socks5CommandRequest socks5CmdRequest = (Socks5CommandRequest) socksRequest;
-                    if (socks5CmdRequest.type() == Socks5CommandType.CONNECT) {
-                        ctx.pipeline().addLast(new SocksServerConnectHandler());
-                        ctx.pipeline().remove(this);
-                        ctx.fireChannelRead(socksRequest);
-                    } else {
-                        ctx.close();
-                    }
                 } else {
                     ctx.close();
                 }

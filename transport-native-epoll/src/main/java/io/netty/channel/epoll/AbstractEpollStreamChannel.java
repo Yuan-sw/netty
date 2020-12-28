@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,11 +17,12 @@ package io.netty.channel.epoll;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelMetadata;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
@@ -29,14 +30,12 @@ import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.EventLoop;
 import io.netty.channel.FileRegion;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.internal.ChannelUtils;
 import io.netty.channel.socket.DuplexChannel;
 import io.netty.channel.unix.FileDescriptor;
-import io.netty.channel.unix.IovArray;
-import io.netty.channel.unix.SocketWritableByteChannel;
-import io.netty.channel.unix.UnixChannelUtil;
+import io.netty.channel.unix.Socket;
 import io.netty.util.internal.PlatformDependent;
 import io.netty.util.internal.StringUtil;
+import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.UnstableApi;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -49,61 +48,79 @@ import java.nio.channels.WritableByteChannel;
 import java.util.Queue;
 import java.util.concurrent.Executor;
 
-import static io.netty.channel.internal.ChannelUtils.MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD;
-import static io.netty.channel.internal.ChannelUtils.WRITE_STATUS_SNDBUF_FULL;
 import static io.netty.channel.unix.FileDescriptor.pipe;
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
-import static io.netty.util.internal.ObjectUtil.checkPositiveOrZero;
 
 public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel implements DuplexChannel {
-    private static final ChannelMetadata METADATA = new ChannelMetadata(false, 16);
+
     private static final String EXPECTED_TYPES =
             " (expected: " + StringUtil.simpleClassName(ByteBuf.class) + ", " +
                     StringUtil.simpleClassName(DefaultFileRegion.class) + ')';
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(AbstractEpollStreamChannel.class);
+    private static final ClosedChannelException CLEAR_SPLICE_QUEUE_CLOSED_CHANNEL_EXCEPTION =
+            ThrowableUtil.unknownStackTrace(new ClosedChannelException(),
+                    AbstractEpollStreamChannel.class, "clearSpliceQueue()");
+    private static final ClosedChannelException SPLICE_TO_CLOSED_CHANNEL_EXCEPTION = ThrowableUtil.unknownStackTrace(
+            new ClosedChannelException(),
+            AbstractEpollStreamChannel.class, "spliceTo(...)");
+    private static final ClosedChannelException FAIL_SPLICE_IF_CLOSED_CLOSED_CHANNEL_EXCEPTION =
+            ThrowableUtil.unknownStackTrace(new ClosedChannelException(),
+            AbstractEpollStreamChannel.class, "failSpliceIfClosed(...)");
 
-    private final Runnable flushTask = new Runnable() {
-        @Override
-        public void run() {
-            // Calling flush0 directly to ensure we not try to flush messages that were added via write(...) in the
-            // meantime.
-            ((AbstractEpollUnsafe) unsafe()).flush0();
-        }
-    };
+    private Queue<SpliceInTask> spliceQueue;
 
     // Lazy init these if we need to splice(...)
-    private volatile Queue<SpliceInTask> spliceQueue;
     private FileDescriptor pipeIn;
     private FileDescriptor pipeOut;
 
     private WritableByteChannel byteChannel;
 
+    /**
+     * @deprecated Use {@link #AbstractEpollStreamChannel(Channel, Socket)}.
+     */
+    @Deprecated
     protected AbstractEpollStreamChannel(Channel parent, int fd) {
-        this(parent, new LinuxSocket(fd));
+        this(parent, new Socket(fd));
     }
 
+    /**
+     * @deprecated Use {@link #AbstractEpollStreamChannel(Socket, boolean)}.
+     */
+    @Deprecated
     protected AbstractEpollStreamChannel(int fd) {
-        this(new LinuxSocket(fd));
+        this(new Socket(fd));
     }
 
-    AbstractEpollStreamChannel(LinuxSocket fd) {
+    /**
+     * @deprecated Use {@link #AbstractEpollStreamChannel(Socket, boolean)}.
+     */
+    @Deprecated
+    protected AbstractEpollStreamChannel(FileDescriptor fd) {
+        this(new Socket(fd.intValue()));
+    }
+
+    /**
+     * @deprecated Use {@link #AbstractEpollStreamChannel(Socket, boolean)}.
+     */
+    @Deprecated
+    protected AbstractEpollStreamChannel(Socket fd) {
         this(fd, isSoErrorZero(fd));
     }
 
-    AbstractEpollStreamChannel(Channel parent, LinuxSocket fd) {
-        super(parent, fd, true);
+    protected AbstractEpollStreamChannel(Channel parent, Socket fd) {
+        super(parent, fd, Native.EPOLLIN, true);
         // Add EPOLLRDHUP so we are notified once the remote peer close the connection.
         flags |= Native.EPOLLRDHUP;
     }
 
-    AbstractEpollStreamChannel(Channel parent, LinuxSocket fd, SocketAddress remote) {
-        super(parent, fd, remote);
+    AbstractEpollStreamChannel(Channel parent, Socket fd, SocketAddress remote) {
+        super(parent, fd, Native.EPOLLIN, remote);
         // Add EPOLLRDHUP so we are notified once the remote peer close the connection.
         flags |= Native.EPOLLRDHUP;
     }
 
-    protected AbstractEpollStreamChannel(LinuxSocket fd, boolean active) {
-        super(null, fd, active);
+    protected AbstractEpollStreamChannel(Socket fd, boolean active) {
+        super(null, fd, Native.EPOLLIN, active);
         // Add EPOLLRDHUP so we are notified once the remote peer close the connection.
         flags |= Native.EPOLLRDHUP;
     }
@@ -111,11 +128,6 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     @Override
     protected AbstractEpollUnsafe newUnsafe() {
         return new EpollStreamUnsafe();
-    }
-
-    @Override
-    public ChannelMetadata metadata() {
-        return METADATA;
     }
 
     /**
@@ -155,14 +167,16 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
         if (ch.eventLoop() != eventLoop()) {
             throw new IllegalArgumentException("EventLoops are not the same.");
         }
-        checkPositiveOrZero(len, "len");
+        if (len < 0) {
+            throw new IllegalArgumentException("len: " + len + " (expected: >= 0)");
+        }
         if (ch.config().getEpollMode() != EpollMode.LEVEL_TRIGGERED
                 || config().getEpollMode() != EpollMode.LEVEL_TRIGGERED) {
             throw new IllegalStateException("spliceTo() supported only when using " + EpollMode.LEVEL_TRIGGERED);
         }
         checkNotNull(promise, "promise");
         if (!isOpen()) {
-            promise.tryFailure(new ClosedChannelException());
+            promise.tryFailure(SPLICE_TO_CLOSED_CHANNEL_EXCEPTION);
         } else {
             addToSpliceQueue(new SpliceInChannelTask(ch, len, promise));
             failSpliceIfClosed(promise);
@@ -204,14 +218,18 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
      */
     public final ChannelFuture spliceTo(final FileDescriptor ch, final int offset, final int len,
                                         final ChannelPromise promise) {
-        checkPositiveOrZero(len, "len");
-        checkPositiveOrZero(offset, "offset");
+        if (len < 0) {
+            throw new IllegalArgumentException("len: " + len + " (expected: >= 0)");
+        }
+        if (offset < 0) {
+            throw new IllegalArgumentException("offset must be >= 0 but was " + offset);
+        }
         if (config().getEpollMode() != EpollMode.LEVEL_TRIGGERED) {
             throw new IllegalStateException("spliceTo() supported only when using " + EpollMode.LEVEL_TRIGGERED);
         }
         checkNotNull(promise, "promise");
         if (!isOpen()) {
-            promise.tryFailure(new ClosedChannelException());
+            promise.tryFailure(SPLICE_TO_CLOSED_CHANNEL_EXCEPTION);
         } else {
             addToSpliceQueue(new SpliceFdTask(ch, offset, len, promise));
             failSpliceIfClosed(promise);
@@ -223,7 +241,7 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
         if (!isOpen()) {
             // Seems like the Channel was closed in the meantime try to fail the promise to prevent any
             // cases where a future may not be notified otherwise.
-            if (promise.tryFailure(new ClosedChannelException())) {
+            if (promise.tryFailure(FAIL_SPLICE_IF_CLOSED_CLOSED_CHANNEL_EXCEPTION)) {
                 eventLoop().execute(new Runnable() {
                     @Override
                     public void run() {
@@ -237,281 +255,291 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
 
     /**
      * Write bytes form the given {@link ByteBuf} to the underlying {@link java.nio.channels.Channel}.
-     * @param in the collection which contains objects to write.
-     * @param buf the {@link ByteBuf} from which the bytes should be written
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
+     * @param buf           the {@link ByteBuf} from which the bytes should be written
      */
-    private int writeBytes(ChannelOutboundBuffer in, ByteBuf buf) throws Exception {
+    private boolean writeBytes(ChannelOutboundBuffer in, ByteBuf buf, int writeSpinCount) throws Exception {
         int readableBytes = buf.readableBytes();
         if (readableBytes == 0) {
             in.remove();
-            return 0;
+            return true;
         }
 
         if (buf.hasMemoryAddress() || buf.nioBufferCount() == 1) {
-            return doWriteBytes(in, buf);
+            int writtenBytes = doWriteBytes(buf, writeSpinCount);
+            in.removeBytes(writtenBytes);
+            return writtenBytes == readableBytes;
         } else {
             ByteBuffer[] nioBuffers = buf.nioBuffers();
-            return writeBytesMultiple(in, nioBuffers, nioBuffers.length, readableBytes,
-                    config().getMaxBytesPerGatheringWrite());
+            return writeBytesMultiple(in, nioBuffers, nioBuffers.length, readableBytes, writeSpinCount);
         }
     }
 
-    private void adjustMaxBytesPerGatheringWrite(long attempted, long written, long oldMaxBytesPerGatheringWrite) {
-        // By default we track the SO_SNDBUF when ever it is explicitly set. However some OSes may dynamically change
-        // SO_SNDBUF (and other characteristics that determine how much data can be written at once) so we should try
-        // make a best effort to adjust as OS behavior changes.
-        if (attempted == written) {
-            if (attempted << 1 > oldMaxBytesPerGatheringWrite) {
-                config().setMaxBytesPerGatheringWrite(attempted << 1);
-            }
-        } else if (attempted > MAX_BYTES_PER_GATHERING_WRITE_ATTEMPTED_LOW_THRESHOLD && written < attempted >>> 1) {
-            config().setMaxBytesPerGatheringWrite(attempted >>> 1);
-        }
-    }
+    private boolean writeBytesMultiple(
+            ChannelOutboundBuffer in, IovArray array, int writeSpinCount) throws IOException {
 
-    /**
-     * Write multiple bytes via {@link IovArray}.
-     * @param in the collection which contains objects to write.
-     * @param array The array which contains the content to write.
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
-     * @throws IOException If an I/O exception occurs during write.
-     */
-    private int writeBytesMultiple(ChannelOutboundBuffer in, IovArray array) throws IOException {
-        final long expectedWrittenBytes = array.size();
+        long expectedWrittenBytes = array.size();
+        final long initialExpectedWrittenBytes = expectedWrittenBytes;
+
+        int cnt = array.count();
+
         assert expectedWrittenBytes != 0;
-        final int cnt = array.count();
         assert cnt != 0;
 
-        final long localWrittenBytes = socket.writevAddresses(array.memoryAddress(0), cnt);
-        if (localWrittenBytes > 0) {
-            adjustMaxBytesPerGatheringWrite(expectedWrittenBytes, localWrittenBytes, array.maxBytes());
-            in.removeBytes(localWrittenBytes);
-            return 1;
+        boolean done = false;
+        int offset = 0;
+        int end = offset + cnt;
+        for (int i = writeSpinCount - 1; i >= 0; i--) {
+            long localWrittenBytes = fd().writevAddresses(array.memoryAddress(offset), cnt);
+            if (localWrittenBytes == 0) {
+                break;
+            }
+            expectedWrittenBytes -= localWrittenBytes;
+
+            if (expectedWrittenBytes == 0) {
+                // Written everything, just break out here (fast-path)
+                done = true;
+                break;
+            }
+
+            do {
+                long bytes = array.processWritten(offset, localWrittenBytes);
+                if (bytes == -1) {
+                    // incomplete write
+                    break;
+                } else {
+                    offset++;
+                    cnt--;
+                    localWrittenBytes -= bytes;
+                }
+            } while (offset < end && localWrittenBytes > 0);
         }
-        return WRITE_STATUS_SNDBUF_FULL;
+        in.removeBytes(initialExpectedWrittenBytes - expectedWrittenBytes);
+        return done;
     }
 
-    /**
-     * Write multiple bytes via {@link ByteBuffer} array.
-     * @param in the collection which contains objects to write.
-     * @param nioBuffers The buffers to write.
-     * @param nioBufferCnt The number of buffers to write.
-     * @param expectedWrittenBytes The number of bytes we expect to write.
-     * @param maxBytesPerGatheringWrite The maximum number of bytes we should attempt to write.
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
-     * @throws IOException If an I/O exception occurs during write.
-     */
-    private int writeBytesMultiple(
-            ChannelOutboundBuffer in, ByteBuffer[] nioBuffers, int nioBufferCnt, long expectedWrittenBytes,
-            long maxBytesPerGatheringWrite) throws IOException {
+    private boolean writeBytesMultiple(
+            ChannelOutboundBuffer in, ByteBuffer[] nioBuffers,
+            int nioBufferCnt, long expectedWrittenBytes, int writeSpinCount) throws IOException {
+
         assert expectedWrittenBytes != 0;
-        if (expectedWrittenBytes > maxBytesPerGatheringWrite) {
-            expectedWrittenBytes = maxBytesPerGatheringWrite;
+        final long initialExpectedWrittenBytes = expectedWrittenBytes;
+
+        boolean done = false;
+        int offset = 0;
+        int end = offset + nioBufferCnt;
+        for (int i = writeSpinCount - 1; i >= 0; i--) {
+            long localWrittenBytes = fd().writev(nioBuffers, offset, nioBufferCnt);
+            if (localWrittenBytes == 0) {
+                break;
+            }
+            expectedWrittenBytes -= localWrittenBytes;
+
+            if (expectedWrittenBytes == 0) {
+                // Written everything, just break out here (fast-path)
+                done = true;
+                break;
+            }
+            do {
+                ByteBuffer buffer = nioBuffers[offset];
+                int pos = buffer.position();
+                int bytes = buffer.limit() - pos;
+                if (bytes > localWrittenBytes) {
+                    buffer.position(pos + (int) localWrittenBytes);
+                    // incomplete write
+                    break;
+                } else {
+                    offset++;
+                    nioBufferCnt--;
+                    localWrittenBytes -= bytes;
+                }
+            } while (offset < end && localWrittenBytes > 0);
         }
 
-        final long localWrittenBytes = socket.writev(nioBuffers, 0, nioBufferCnt, expectedWrittenBytes);
-        if (localWrittenBytes > 0) {
-            adjustMaxBytesPerGatheringWrite(expectedWrittenBytes, localWrittenBytes, maxBytesPerGatheringWrite);
-            in.removeBytes(localWrittenBytes);
-            return 1;
-        }
-        return WRITE_STATUS_SNDBUF_FULL;
+        in.removeBytes(initialExpectedWrittenBytes - expectedWrittenBytes);
+        return done;
     }
 
     /**
      * Write a {@link DefaultFileRegion}
-     * @param in the collection which contains objects to write.
-     * @param region the {@link DefaultFileRegion} from which the bytes should be written
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
+     *
+     * @param region        the {@link DefaultFileRegion} from which the bytes should be written
+     * @return amount       the amount of written bytes
      */
-    private int writeDefaultFileRegion(ChannelOutboundBuffer in, DefaultFileRegion region) throws Exception {
-        final long offset = region.transferred();
+    private boolean writeDefaultFileRegion(
+            ChannelOutboundBuffer in, DefaultFileRegion region, int writeSpinCount) throws Exception {
         final long regionCount = region.count();
-        if (offset >= regionCount) {
+        if (region.transfered() >= regionCount) {
             in.remove();
-            return 0;
+            return true;
         }
 
-        final long flushedAmount = socket.sendFile(region, region.position(), offset, regionCount - offset);
+        final long baseOffset = region.position();
+        boolean done = false;
+        long flushedAmount = 0;
+
+        for (int i = writeSpinCount - 1; i >= 0; i--) {
+            final long offset = region.transfered();
+            final long localFlushedAmount =
+                    Native.sendfile(fd().intValue(), region, baseOffset, offset, regionCount - offset);
+            if (localFlushedAmount == 0) {
+                break;
+            }
+
+            flushedAmount += localFlushedAmount;
+            if (region.transfered() >= regionCount) {
+                done = true;
+                break;
+            }
+        }
+
         if (flushedAmount > 0) {
             in.progress(flushedAmount);
-            if (region.transferred() >= regionCount) {
-                in.remove();
-            }
-            return 1;
-        } else if (flushedAmount == 0) {
-            validateFileRegion(region, offset);
         }
-        return WRITE_STATUS_SNDBUF_FULL;
+
+        if (done) {
+            in.remove();
+        }
+        return done;
     }
 
-    /**
-     * Write a {@link FileRegion}
-     * @param in the collection which contains objects to write.
-     * @param region the {@link FileRegion} from which the bytes should be written
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
-     */
-    private int writeFileRegion(ChannelOutboundBuffer in, FileRegion region) throws Exception {
-        if (region.transferred() >= region.count()) {
+    private boolean writeFileRegion(
+            ChannelOutboundBuffer in, FileRegion region, final int writeSpinCount) throws Exception {
+        if (region.transfered() >= region.count()) {
             in.remove();
-            return 0;
+            return true;
         }
 
+        boolean done = false;
+        long flushedAmount = 0;
+
         if (byteChannel == null) {
-            byteChannel = new EpollSocketWritableByteChannel();
+            byteChannel = new SocketWritableByteChannel();
         }
-        final long flushedAmount = region.transferTo(byteChannel, region.transferred());
+        for (int i = writeSpinCount - 1; i >= 0; i--) {
+            final long localFlushedAmount = region.transferTo(byteChannel, region.transfered());
+            if (localFlushedAmount == 0) {
+                break;
+            }
+
+            flushedAmount += localFlushedAmount;
+            if (region.transfered() >= region.count()) {
+                done = true;
+                break;
+            }
+        }
+
         if (flushedAmount > 0) {
             in.progress(flushedAmount);
-            if (region.transferred() >= region.count()) {
-                in.remove();
-            }
-            return 1;
         }
-        return WRITE_STATUS_SNDBUF_FULL;
+
+        if (done) {
+            in.remove();
+        }
+        return done;
     }
 
     @Override
     protected void doWrite(ChannelOutboundBuffer in) throws Exception {
         int writeSpinCount = config().getWriteSpinCount();
-        do {
+        for (;;) {
             final int msgCount = in.size();
-            // Do gathering write if the outbound buffer entries start with more than one ByteBuf.
-            if (msgCount > 1 && in.current() instanceof ByteBuf) {
-                writeSpinCount -= doWriteMultiple(in);
-            } else if (msgCount == 0) {
+
+            if (msgCount == 0) {
                 // Wrote all messages.
                 clearFlag(Native.EPOLLOUT);
                 // Return here so we not set the EPOLLOUT flag.
                 return;
-            } else {  // msgCount == 1
-                writeSpinCount -= doWriteSingle(in);
             }
 
-            // We do not break the loop here even if the outbound buffer was flushed completely,
-            // because a user might have triggered another write and flush when we notify his or her
-            // listeners.
-        } while (writeSpinCount > 0);
+            // Do gathering write if the outbounf buffer entries start with more than one ByteBuf.
+            if (msgCount > 1 && in.current() instanceof ByteBuf) {
+                if (!doWriteMultiple(in, writeSpinCount)) {
+                    // Break the loop and so set EPOLLOUT flag.
+                    break;
+                }
 
-        if (writeSpinCount == 0) {
-            // It is possible that we have set EPOLLOUT, woken up by EPOLL because the socket is writable, and then use
-            // our write quantum. In this case we no longer want to set the EPOLLOUT flag because the socket is still
-            // writable (as far as we know). We will find out next time we attempt to write if the socket is writable
-            // and set the EPOLLOUT if necessary.
-            clearFlag(Native.EPOLLOUT);
-
-            // We used our writeSpin quantum, and should try to write again later.
-            eventLoop().execute(flushTask);
-        } else {
-            // Underlying descriptor can not accept all data currently, so set the EPOLLOUT flag to be woken up
-            // when it can accept more data.
-            setFlag(Native.EPOLLOUT);
+                // We do not break the loop here even if the outbound buffer was flushed completely,
+                // because a user might have triggered another write and flush when we notify his or her
+                // listeners.
+            } else { // msgCount == 1
+                if (!doWriteSingle(in, writeSpinCount)) {
+                    // Break the loop and so set EPOLLOUT flag.
+                    break;
+                }
+            }
         }
+        // Underlying descriptor can not accept all data currently, so set the EPOLLOUT flag to be woken up
+        // when it can accept more data.
+        setFlag(Native.EPOLLOUT);
     }
 
-    /**
-     * Attempt to write a single object.
-     * @param in the collection which contains objects to write.
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
-     * @throws Exception If an I/O error occurs.
-     */
-    protected int doWriteSingle(ChannelOutboundBuffer in) throws Exception {
+    protected boolean doWriteSingle(ChannelOutboundBuffer in, int writeSpinCount) throws Exception {
         // The outbound buffer contains only one message or it contains a file region.
         Object msg = in.current();
         if (msg instanceof ByteBuf) {
-            return writeBytes(in, (ByteBuf) msg);
+            if (!writeBytes(in, (ByteBuf) msg, writeSpinCount)) {
+                // was not able to write everything so break here we will get notified later again once
+                // the network stack can handle more writes.
+                return false;
+            }
         } else if (msg instanceof DefaultFileRegion) {
-            return writeDefaultFileRegion(in, (DefaultFileRegion) msg);
+            if (!writeDefaultFileRegion(in, (DefaultFileRegion) msg, writeSpinCount)) {
+                // was not able to write everything so break here we will get notified later again once
+                // the network stack can handle more writes.
+                return false;
+            }
         } else if (msg instanceof FileRegion) {
-            return writeFileRegion(in, (FileRegion) msg);
+            if (!writeFileRegion(in, (FileRegion) msg, writeSpinCount)) {
+                // was not able to write everything so break here we will get notified later again once
+                // the network stack can handle more writes.
+                return false;
+            }
         } else if (msg instanceof SpliceOutTask) {
             if (!((SpliceOutTask) msg).spliceOut()) {
-                return WRITE_STATUS_SNDBUF_FULL;
+                return false;
             }
             in.remove();
-            return 1;
         } else {
             // Should never reach here.
             throw new Error();
         }
+
+        return true;
     }
 
-    /**
-     * Attempt to write multiple {@link ByteBuf} objects.
-     * @param in the collection which contains objects to write.
-     * @return The value that should be decremented from the write quantum which starts at
-     * {@link ChannelConfig#getWriteSpinCount()}. The typical use cases are as follows:
-     * <ul>
-     *     <li>0 - if no write was attempted. This is appropriate if an empty {@link ByteBuf} (or other empty content)
-     *     is encountered</li>
-     *     <li>1 - if a single call to write data was made to the OS</li>
-     *     <li>{@link ChannelUtils#WRITE_STATUS_SNDBUF_FULL} - if an attempt to write data was made to the OS, but
-     *     no data was accepted</li>
-     * </ul>
-     * @throws Exception If an I/O error occurs.
-     */
-    private int doWriteMultiple(ChannelOutboundBuffer in) throws Exception {
-        final long maxBytesPerGatheringWrite = config().getMaxBytesPerGatheringWrite();
-        IovArray array = ((EpollEventLoop) eventLoop()).cleanIovArray();
-        array.maxBytes(maxBytesPerGatheringWrite);
-        in.forEachFlushedMessage(array);
+    private boolean doWriteMultiple(ChannelOutboundBuffer in, int writeSpinCount) throws Exception {
+        if (PlatformDependent.hasUnsafe()) {
+            // this means we can cast to IovArray and write the IovArray directly.
+            IovArray array = ((EpollEventLoop) eventLoop()).cleanArray();
+            in.forEachFlushedMessage(array);
 
-        if (array.count() >= 1) {
-            // TODO: Handle the case where cnt == 1 specially.
-            return writeBytesMultiple(in, array);
+            int cnt = array.count();
+            if (cnt >= 1) {
+                // TODO: Handle the case where cnt == 1 specially.
+                if (!writeBytesMultiple(in, array, writeSpinCount)) {
+                    // was not able to write everything so break here we will get notified later again once
+                    // the network stack can handle more writes.
+                    return false;
+                }
+            } else { // cnt == 0, which means the outbound buffer contained empty buffers only.
+                in.removeBytes(0);
+            }
+        } else {
+            ByteBuffer[] buffers = in.nioBuffers();
+            int cnt = in.nioBufferCount();
+            if (cnt >= 1) {
+                // TODO: Handle the case where cnt == 1 specially.
+                if (!writeBytesMultiple(in, buffers, cnt, in.nioBufferSize(), writeSpinCount)) {
+                    // was not able to write everything so break here we will get notified later again once
+                    // the network stack can handle more writes.
+                    return false;
+                }
+            } else { // cnt == 0, which means the outbound buffer contained empty buffers only.
+                in.removeBytes(0);
+            }
         }
-        // cnt == 0, which means the outbound buffer contained empty buffers only.
-        in.removeBytes(0);
-        return 0;
+
+        return true;
     }
 
     @Override
@@ -532,31 +560,17 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     @UnstableApi
     @Override
     protected final void doShutdownOutput() throws Exception {
-        socket.shutdown(false, true);
-    }
-
-    private void shutdownInput0(final ChannelPromise promise) {
-        try {
-            socket.shutdown(true, false);
-            promise.setSuccess();
-        } catch (Throwable cause) {
-            promise.setFailure(cause);
-        }
-    }
-
-    @Override
-    public boolean isOutputShutdown() {
-        return socket.isOutputShutdown();
+        fd().shutdown(false, true);
     }
 
     @Override
     public boolean isInputShutdown() {
-        return socket.isInputShutdown();
+        return fd().isInputShutdown();
     }
 
     @Override
-    public boolean isShutdown() {
-        return socket.isShutdown();
+    public boolean isOutputShutdown() {
+        return fd().isOutputShutdown();
     }
 
     @Override
@@ -582,90 +596,6 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     }
 
     @Override
-    public ChannelFuture shutdownInput() {
-        return shutdownInput(newPromise());
-    }
-
-    @Override
-    public ChannelFuture shutdownInput(final ChannelPromise promise) {
-        Executor closeExecutor = ((EpollStreamUnsafe) unsafe()).prepareToClose();
-        if (closeExecutor != null) {
-            closeExecutor.execute(new Runnable() {
-                @Override
-                public void run() {
-                    shutdownInput0(promise);
-                }
-            });
-        } else {
-            EventLoop loop = eventLoop();
-            if (loop.inEventLoop()) {
-                shutdownInput0(promise);
-            } else {
-                loop.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        shutdownInput0(promise);
-                    }
-                });
-            }
-        }
-        return promise;
-    }
-
-    @Override
-    public ChannelFuture shutdown() {
-        return shutdown(newPromise());
-    }
-
-    @Override
-    public ChannelFuture shutdown(final ChannelPromise promise) {
-        ChannelFuture shutdownOutputFuture = shutdownOutput();
-        if (shutdownOutputFuture.isDone()) {
-            shutdownOutputDone(shutdownOutputFuture, promise);
-        } else {
-            shutdownOutputFuture.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(final ChannelFuture shutdownOutputFuture) throws Exception {
-                    shutdownOutputDone(shutdownOutputFuture, promise);
-                }
-            });
-        }
-        return promise;
-    }
-
-    private void shutdownOutputDone(final ChannelFuture shutdownOutputFuture, final ChannelPromise promise) {
-        ChannelFuture shutdownInputFuture = shutdownInput();
-        if (shutdownInputFuture.isDone()) {
-            shutdownDone(shutdownOutputFuture, shutdownInputFuture, promise);
-        } else {
-            shutdownInputFuture.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture shutdownInputFuture) throws Exception {
-                    shutdownDone(shutdownOutputFuture, shutdownInputFuture, promise);
-                }
-            });
-        }
-    }
-
-    private static void shutdownDone(ChannelFuture shutdownOutputFuture,
-                              ChannelFuture shutdownInputFuture,
-                              ChannelPromise promise) {
-        Throwable shutdownOutputCause = shutdownOutputFuture.cause();
-        Throwable shutdownInputCause = shutdownInputFuture.cause();
-        if (shutdownOutputCause != null) {
-            if (shutdownInputCause != null) {
-                logger.debug("Exception suppressed because a previous exception occurred.",
-                        shutdownInputCause);
-            }
-            promise.setFailure(shutdownOutputCause);
-        } else if (shutdownInputCause != null) {
-            promise.setFailure(shutdownInputCause);
-        } else {
-            promise.setSuccess();
-        }
-    }
-
-    @Override
     protected void doClose() throws Exception {
         try {
             // Calling super.doClose() first so spliceTo(...) will fail on next call.
@@ -678,21 +608,15 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     }
 
     private void clearSpliceQueue() {
-        Queue<SpliceInTask> sQueue = spliceQueue;
-        if (sQueue == null) {
+        if (spliceQueue == null) {
             return;
         }
-        ClosedChannelException exception = null;
-
         for (;;) {
-            SpliceInTask task = sQueue.poll();
+            SpliceInTask task = spliceQueue.poll();
             if (task == null) {
                 break;
             }
-            if (exception == null) {
-                exception = new ClosedChannelException();
-            }
-            task.promise.tryFailure(exception);
+            task.promise.tryFailure(CLEAR_SPLICE_QUEUE_CLOSED_CHANNEL_EXCEPTION);
         }
     }
 
@@ -701,20 +625,24 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
             try {
                 fd.close();
             } catch (IOException e) {
-                logger.warn("Error while closing a pipe", e);
+                if (logger.isWarnEnabled()) {
+                    logger.warn("Error while closing a pipe", e);
+                }
             }
         }
     }
 
     class EpollStreamUnsafe extends AbstractEpollUnsafe {
+
+        private RecvByteBufAllocator.Handle allocHandle;
+
         // Overridden here just to be able to access this method from AbstractEpollStreamChannel
         @Override
         protected Executor prepareToClose() {
             return super.prepareToClose();
         }
 
-        private void handleReadException(ChannelPipeline pipeline, ByteBuf byteBuf, Throwable cause, boolean close,
-                EpollRecvByteAllocatorHandle allocHandle) {
+        private boolean handleReadException(ChannelPipeline pipeline, ByteBuf byteBuf, Throwable cause, boolean close) {
             if (byteBuf != null) {
                 if (byteBuf.isReadable()) {
                     readPending = false;
@@ -723,50 +651,53 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                     byteBuf.release();
                 }
             }
-            allocHandle.readComplete();
             pipeline.fireChannelReadComplete();
             pipeline.fireExceptionCaught(cause);
-
-            // If oom will close the read event, release connection.
-            // See https://github.com/netty/netty/issues/10434
-            if (close || cause instanceof OutOfMemoryError || cause instanceof IOException) {
-                shutdownInput(false);
+            if (close || cause instanceof IOException) {
+                shutdownInput();
+                return true;
             }
-        }
-
-        @Override
-        EpollRecvByteAllocatorHandle newEpollHandle(RecvByteBufAllocator.ExtendedHandle handle) {
-            return new EpollRecvByteAllocatorStreamingHandle(handle);
+            return false;
         }
 
         @Override
         void epollInReady() {
+            if (fd().isInputShutdown()) {
+                return;
+            }
             final ChannelConfig config = config();
-            if (shouldBreakEpollInReady(config)) {
+            boolean edgeTriggered = isFlagSet(Native.EPOLLET);
+
+            if (!readPending && !edgeTriggered && !config.isAutoRead()) {
+                // ChannelConfig.setAutoRead(false) was called in the meantime
                 clearEpollIn0();
                 return;
             }
-            final EpollRecvByteAllocatorHandle allocHandle = recvBufAllocHandle();
-            allocHandle.edgeTriggered(isFlagSet(Native.EPOLLET));
 
             final ChannelPipeline pipeline = pipeline();
             final ByteBufAllocator allocator = config.getAllocator();
-            allocHandle.reset(config);
-            epollInBefore();
+            RecvByteBufAllocator.Handle allocHandle = this.allocHandle;
+            if (allocHandle == null) {
+                this.allocHandle = allocHandle = config.getRecvByteBufAllocator().newHandle();
+            }
 
             ByteBuf byteBuf = null;
             boolean close = false;
             try {
-                Queue<SpliceInTask> sQueue = null;
+                // if edgeTriggered is used we need to read all messages as we are not notified again otherwise.
+                final int maxMessagesPerRead = edgeTriggered
+                        ? Integer.MAX_VALUE : config.getMaxMessagesPerRead();
+                int messages = 0;
+                int totalReadAmount = 0;
                 do {
-                    if (sQueue != null || (sQueue = spliceQueue) != null) {
-                        SpliceInTask spliceTask = sQueue.peek();
+                    if (spliceQueue != null) {
+                        SpliceInTask spliceTask = spliceQueue.peek();
                         if (spliceTask != null) {
                             if (spliceTask.spliceIn(allocHandle)) {
                                 // We need to check if it is still active as if not we removed all SpliceTasks in
                                 // doClose(...)
                                 if (isActive()) {
-                                    sQueue.remove();
+                                    spliceQueue.remove();
                                 }
                                 continue;
                             } else {
@@ -778,24 +709,44 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                     // we use a direct buffer here as the native implementations only be able
                     // to handle direct buffers.
                     byteBuf = allocHandle.allocate(allocator);
-                    allocHandle.lastBytesRead(doReadBytes(byteBuf));
-                    if (allocHandle.lastBytesRead() <= 0) {
-                        // nothing was read, release the buffer.
+                    int writable = byteBuf.writableBytes();
+                    int localReadAmount = doReadBytes(byteBuf);
+                    if (localReadAmount <= 0) {
+                        // not was read release the buffer
                         byteBuf.release();
-                        byteBuf = null;
-                        close = allocHandle.lastBytesRead() < 0;
+                        close = localReadAmount < 0;
                         if (close) {
                             // There is nothing left to read as we received an EOF.
                             readPending = false;
                         }
                         break;
                     }
-                    allocHandle.incMessagesRead(1);
                     readPending = false;
                     pipeline.fireChannelRead(byteBuf);
                     byteBuf = null;
 
-                    if (shouldBreakEpollInReady(config)) {
+                    if (totalReadAmount >= Integer.MAX_VALUE - localReadAmount) {
+                        allocHandle.record(totalReadAmount);
+
+                        // Avoid overflow.
+                        totalReadAmount = localReadAmount;
+                    } else {
+                        totalReadAmount += localReadAmount;
+                    }
+
+                    if (localReadAmount < writable) {
+                        // Read less than what the buffer can hold,
+                        // which might mean we drained the recv buffer completely.
+                        break;
+                    }
+                    if (!edgeTriggered && !config.isAutoRead()) {
+                        // This is not using EPOLLET so we can stop reading
+                        // ASAP as we will get notified again later with
+                        // pending data
+                        break;
+                    }
+
+                    if (fd().isInputShutdown()) {
                         // We need to do this for two reasons:
                         //
                         // - If the input was shutdown in between (which may be the case when the user did it in the
@@ -809,33 +760,60 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                         //   was "wrapped" by this Channel implementation.
                         break;
                     }
-                } while (allocHandle.continueReading());
+                } while (++ messages < maxMessagesPerRead || isRdHup());
 
-                allocHandle.readComplete();
                 pipeline.fireChannelReadComplete();
+                allocHandle.record(totalReadAmount);
 
                 if (close) {
-                    shutdownInput(false);
+                    shutdownInput();
+                    close = false;
                 }
             } catch (Throwable t) {
-                handleReadException(pipeline, byteBuf, t, close, allocHandle);
+                boolean closed = handleReadException(pipeline, byteBuf, t, close);
+                if (!closed) {
+                    // trigger a read again as there may be something left to read and because of epoll ET we
+                    // will not get notified again until we read everything from the socket
+                    eventLoop().execute(new Runnable() {
+                        @Override
+                        public void run() {
+                            epollInReady();
+                        }
+                    });
+                }
             } finally {
-                epollInFinally(config);
+                // Check if there is a readPending which was not processed yet.
+                // This could be for two reasons:
+                // * The user called Channel.read() or ChannelHandlerContext.read() in channelRead(...) method
+                // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
+                //
+                // See https://github.com/netty/netty/issues/2254
+                if (!readPending && !config.isAutoRead()) {
+                    clearEpollIn0();
+                }
             }
         }
     }
 
     private void addToSpliceQueue(final SpliceInTask task) {
-        Queue<SpliceInTask> sQueue = spliceQueue;
-        if (sQueue == null) {
-            synchronized (this) {
-                sQueue = spliceQueue;
-                if (sQueue == null) {
-                    spliceQueue = sQueue = PlatformDependent.newMpscQueue();
+        EventLoop eventLoop = eventLoop();
+        if (eventLoop.inEventLoop()) {
+            addToSpliceQueue0(task);
+        } else {
+            eventLoop.execute(new Runnable() {
+                @Override
+                public void run() {
+                    addToSpliceQueue0(task);
                 }
-            }
+            });
         }
-        sQueue.add(task);
+    }
+
+    private void addToSpliceQueue0(SpliceInTask task) {
+        if (spliceQueue == null) {
+            spliceQueue = PlatformDependent.newMpscQueue();
+        }
+        spliceQueue.add(task);
     }
 
     protected abstract class SpliceInTask {
@@ -855,7 +833,7 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
             int splicedIn = 0;
             for (;;) {
                 // Splicing until there is nothing left to splice.
-                int localSplicedIn = Native.splice(socket.intValue(), -1, pipeOut.intValue(), -1, length);
+                int localSplicedIn = Native.splice(fd().intValue(), -1, pipeOut.intValue(), -1, length);
                 if (localSplicedIn == 0) {
                     break;
                 }
@@ -863,6 +841,8 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                 length -= localSplicedIn;
             }
 
+            // record the number of bytes we spliced before
+            handle.record(splicedIn);
             return splicedIn;
         }
     }
@@ -955,7 +935,7 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
         public boolean spliceOut() throws Exception {
             assert ch.eventLoop().inEventLoop();
             try {
-                int splicedOut = Native.splice(ch.pipeIn.intValue(), -1, ch.socket.intValue(), -1, len);
+                int splicedOut = Native.splice(ch.pipeIn.intValue(), -1, ch.fd().intValue(), -1, len);
                 len -= splicedOut;
                 if (len == 0) {
                     if (autoRead) {
@@ -978,7 +958,7 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
     private final class SpliceFdTask extends SpliceInTask {
         private final FileDescriptor fd;
         private final ChannelPromise promise;
-        private int offset;
+        private final int offset;
 
         SpliceFdTask(FileDescriptor fd, int offset, int len, ChannelPromise promise) {
             super(len, promise);
@@ -1008,7 +988,6 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
                         }
                         do {
                             int splicedOut = Native.splice(pipeIn.intValue(), -1, fd.intValue(), offset, splicedIn);
-                            offset += splicedOut;
                             splicedIn -= splicedOut;
                         } while (splicedIn > 0);
                         if (len == 0) {
@@ -1028,14 +1007,55 @@ public abstract class AbstractEpollStreamChannel extends AbstractEpollChannel im
         }
     }
 
-    private final class EpollSocketWritableByteChannel extends SocketWritableByteChannel {
-        EpollSocketWritableByteChannel() {
-            super(socket);
+    private final class SocketWritableByteChannel implements WritableByteChannel {
+
+        @Override
+        public int write(ByteBuffer src) throws IOException {
+            final int written;
+            int position = src.position();
+            int limit = src.limit();
+            if (src.isDirect()) {
+                written = fd().write(src, position, src.limit());
+            } else {
+                final int readableBytes = limit - position;
+                ByteBuf buffer = null;
+                try {
+                    if (readableBytes == 0) {
+                        buffer = Unpooled.EMPTY_BUFFER;
+                    } else {
+                        final ByteBufAllocator alloc = alloc();
+                        if (alloc.isDirectBufferPooled()) {
+                            buffer = alloc.directBuffer(readableBytes);
+                        } else {
+                            buffer = ByteBufUtil.threadLocalDirectBuffer();
+                            if (buffer == null) {
+                                buffer = Unpooled.directBuffer(readableBytes);
+                            }
+                        }
+                    }
+                    buffer.writeBytes(src.duplicate());
+                    ByteBuffer nioBuffer = buffer.internalNioBuffer(buffer.readerIndex(), readableBytes);
+                    written = fd().write(nioBuffer, nioBuffer.position(), nioBuffer.limit());
+                } finally {
+                    if (buffer != null) {
+                        buffer.release();
+                    }
+                }
+            }
+            if (written > 0) {
+                src.position(position + written);
+            }
+            return written;
         }
 
         @Override
-        protected ByteBufAllocator alloc() {
-            return AbstractEpollStreamChannel.this.alloc();
+        public boolean isOpen() {
+            return fd().isOpen();
+        }
+
+        @Override
+        public void close() throws IOException {
+            fd().close();
         }
     }
 }

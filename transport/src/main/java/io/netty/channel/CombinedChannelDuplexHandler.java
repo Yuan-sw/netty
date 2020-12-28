@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.ThrowableUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -79,9 +78,12 @@ public class CombinedChannelDuplexHandler<I extends ChannelInboundHandler, O ext
                             " was constructed with non-default constructor.");
         }
 
-        ObjectUtil.checkNotNull(inboundHandler, "inboundHandler");
-        ObjectUtil.checkNotNull(outboundHandler, "outboundHandler");
-
+        if (inboundHandler == null) {
+            throw new NullPointerException("inboundHandler");
+        }
+        if (outboundHandler == null) {
+            throw new NullPointerException("outboundHandler");
+        }
         if (inboundHandler instanceof ChannelOutboundHandler) {
             throw new IllegalArgumentException(
                     "inboundHandler must not implement " +
@@ -579,12 +581,7 @@ public class CombinedChannelDuplexHandler<I extends ChannelInboundHandler, O ext
 
         @Override
         public <T> Attribute<T> attr(AttributeKey<T> key) {
-            return ctx.channel().attr(key);
-        }
-
-        @Override
-        public <T> boolean hasAttr(AttributeKey<T> key) {
-            return ctx.channel().hasAttr(key);
+            return ctx.attr(key);
         }
 
         final void remove() {

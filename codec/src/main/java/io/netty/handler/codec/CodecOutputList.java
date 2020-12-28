@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -29,6 +29,7 @@ import static io.netty.util.internal.ObjectUtil.checkNotNull;
 final class CodecOutputList extends AbstractList<Object> implements RandomAccess {
 
     private static final CodecOutputListRecycler NOOP_RECYCLER = new CodecOutputListRecycler() {
+
         @Override
         public void recycle(CodecOutputList object) {
             // drop on the floor and let the GC handle it.
@@ -148,7 +149,7 @@ final class CodecOutputList extends AbstractList<Object> implements RandomAccess
             expandArray();
         }
 
-        if (index != size) {
+        if (index != size - 1) {
             System.arraycopy(array, index, array, index + 1, size - index);
         }
 
@@ -206,8 +207,7 @@ final class CodecOutputList extends AbstractList<Object> implements RandomAccess
 
     private void checkIndex(int index) {
         if (index >= size) {
-            throw new IndexOutOfBoundsException("expected: index < ("
-                    + size + "),but actual is (" + size + ")");
+            throw new IndexOutOfBoundsException();
         }
     }
 

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,20 +18,17 @@ package io.netty.handler.codec.http.multipart;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.CompositeByteBuf;
 import io.netty.handler.codec.http.HttpConstants;
-import io.netty.util.internal.ObjectUtil;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.charset.Charset;
 
-import static io.netty.buffer.Unpooled.EMPTY_BUFFER;
-import static io.netty.buffer.Unpooled.buffer;
-import static io.netty.buffer.Unpooled.compositeBuffer;
-import static io.netty.buffer.Unpooled.wrappedBuffer;
+import static io.netty.buffer.Unpooled.*;
 
 /**
  * Abstract Memory HttpData implementation
@@ -40,6 +37,7 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
 
     private ByteBuf byteBuf;
     private int chunkPosition;
+    protected boolean isRenamed;
 
     protected AbstractMemoryHttpData(String name, Charset charset, long size) {
         super(name, charset, size);
@@ -47,9 +45,10 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
 
     @Override
     public void setContent(ByteBuf buffer) throws IOException {
-        ObjectUtil.checkNotNull(buffer, "buffer");
+        if (buffer == null) {
+            throw new NullPointerException("buffer");
+        }
         long localsize = buffer.readableBytes();
-        checkSize(localsize);
         if (definedSize > 0 && definedSize < localsize) {
             throw new IOException("Out of size: " + localsize + " > " +
                     definedSize);
@@ -59,38 +58,32 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
         }
         byteBuf = buffer;
         size = localsize;
-        setCompleted();
+        completed = true;
     }
 
     @Override
     public void setContent(InputStream inputStream) throws IOException {
-        ObjectUtil.checkNotNull(inputStream, "inputStream");
-
-        byte[] bytes = new byte[4096 * 4];
+        if (inputStream == null) {
+            throw new NullPointerException("inputStream");
+        }
         ByteBuf buffer = buffer();
+        byte[] bytes = new byte[4096 * 4];
+        int read = inputStream.read(bytes);
         int written = 0;
-        try {
-            int read = inputStream.read(bytes);
-            while (read > 0) {
-                buffer.writeBytes(bytes, 0, read);
-                written += read;
-                checkSize(written);
-                read = inputStream.read(bytes);
-            }
-        } catch (IOException e) {
-            buffer.release();
-            throw e;
+        while (read > 0) {
+            buffer.writeBytes(bytes, 0, read);
+            written += read;
+            read = inputStream.read(bytes);
         }
         size = written;
         if (definedSize > 0 && definedSize < size) {
-            buffer.release();
             throw new IOException("Out of size: " + size + " > " + definedSize);
         }
         if (byteBuf != null) {
             byteBuf.release();
         }
         byteBuf = buffer;
-        setCompleted();
+        completed = true;
     }
 
     @Override
@@ -98,7 +91,6 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
             throws IOException {
         if (buffer != null) {
             long localsize = buffer.readableBytes();
-            checkSize(size + localsize);
             if (definedSize > 0 && definedSize < size + localsize) {
                 throw new IOException("Out of size: " + (size + localsize) +
                         " > " + definedSize);
@@ -116,45 +108,41 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
             }
         }
         if (last) {
-            setCompleted();
+            completed = true;
         } else {
-            ObjectUtil.checkNotNull(buffer, "buffer");
+            if (buffer == null) {
+                throw new NullPointerException("buffer");
+            }
         }
     }
 
     @Override
     public void setContent(File file) throws IOException {
-        ObjectUtil.checkNotNull(file, "file");
-
+        if (file == null) {
+            throw new NullPointerException("file");
+        }
         long newsize = file.length();
         if (newsize > Integer.MAX_VALUE) {
-            throw new IllegalArgumentException("File too big to be loaded in memory");
+            throw new IllegalArgumentException(
+                    "File too big to be loaded in memory");
         }
-        checkSize(newsize);
-        RandomAccessFile accessFile = new RandomAccessFile(file, "r");
-        ByteBuffer byteBuffer;
-        try {
-            FileChannel fileChannel = accessFile.getChannel();
-            try {
-                byte[] array = new byte[(int) newsize];
-                byteBuffer = ByteBuffer.wrap(array);
-                int read = 0;
-                while (read < newsize) {
-                    read += fileChannel.read(byteBuffer);
-                }
-            } finally {
-                fileChannel.close();
-            }
-        } finally {
-            accessFile.close();
+        FileInputStream inputStream = new FileInputStream(file);
+        FileChannel fileChannel = inputStream.getChannel();
+        byte[] array = new byte[(int) newsize];
+        ByteBuffer byteBuffer = ByteBuffer.wrap(array);
+        int read = 0;
+        while (read < newsize) {
+            read += fileChannel.read(byteBuffer);
         }
+        fileChannel.close();
+        inputStream.close();
         byteBuffer.flip();
         if (byteBuf != null) {
             byteBuf.release();
         }
         byteBuf = wrappedBuffer(Integer.MAX_VALUE, byteBuffer);
         size = newsize;
-        setCompleted();
+        completed = true;
     }
 
     @Override
@@ -216,7 +204,7 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
         if (sizeLeft < length) {
             sliceLength = sizeLeft;
         }
-        ByteBuf chunk = byteBuf.retainedSlice(chunkPosition, sliceLength);
+        ByteBuf chunk = byteBuf.slice(chunkPosition, sliceLength).retain();
         chunkPosition += sliceLength;
         return chunk;
     }
@@ -228,56 +216,40 @@ public abstract class AbstractMemoryHttpData extends AbstractHttpData {
 
     @Override
     public boolean renameTo(File dest) throws IOException {
-        ObjectUtil.checkNotNull(dest, "dest");
+        if (dest == null) {
+            throw new NullPointerException("dest");
+        }
         if (byteBuf == null) {
             // empty file
-            if (!dest.createNewFile()) {
-                throw new IOException("file exists already: " + dest);
-            }
+            dest.createNewFile();
+            isRenamed = true;
             return true;
         }
         int length = byteBuf.readableBytes();
-        long written = 0;
-        RandomAccessFile accessFile = new RandomAccessFile(dest, "rw");
-        try {
-            FileChannel fileChannel = accessFile.getChannel();
-            try {
-                if (byteBuf.nioBufferCount() == 1) {
-                    ByteBuffer byteBuffer = byteBuf.nioBuffer();
-                    while (written < length) {
-                        written += fileChannel.write(byteBuffer);
-                    }
-                } else {
-                    ByteBuffer[] byteBuffers = byteBuf.nioBuffers();
-                    while (written < length) {
-                        written += fileChannel.write(byteBuffers);
-                    }
-                }
-                fileChannel.force(false);
-            } finally {
-                fileChannel.close();
+        FileOutputStream outputStream = new FileOutputStream(dest);
+        FileChannel fileChannel = outputStream.getChannel();
+        int written = 0;
+        if (byteBuf.nioBufferCount() == 1) {
+            ByteBuffer byteBuffer = byteBuf.nioBuffer();
+            while (written < length) {
+                written += fileChannel.write(byteBuffer);
             }
-        } finally {
-            accessFile.close();
+        } else {
+            ByteBuffer[] byteBuffers = byteBuf.nioBuffers();
+            while (written < length) {
+                written += fileChannel.write(byteBuffers);
+            }
         }
+
+        fileChannel.force(false);
+        fileChannel.close();
+        outputStream.close();
+        isRenamed = true;
         return written == length;
     }
 
     @Override
     public File getFile() throws IOException {
         throw new IOException("Not represented by a file");
-    }
-
-    @Override
-    public HttpData touch() {
-        return touch(null);
-    }
-
-    @Override
-    public HttpData touch(Object hint) {
-        if (byteBuf != null) {
-            byteBuf.touch(hint);
-        }
-        return this;
     }
 }

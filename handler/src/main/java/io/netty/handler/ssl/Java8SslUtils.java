@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.handler.ssl;
-
-import io.netty.util.internal.SuppressJava6Requirement;
 
 import javax.net.ssl.SNIHostName;
 import javax.net.ssl.SNIMatcher;
@@ -27,7 +25,6 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-@SuppressJava6Requirement(reason = "Usage guarded by java version check")
 final class Java8SslUtils {
 
     private Java8SslUtils() { }
@@ -51,25 +48,11 @@ final class Java8SslUtils {
     }
 
     static void setSniHostNames(SSLParameters sslParameters, List<String> names) {
-        sslParameters.setServerNames(getSniHostNames(names));
-    }
-
-    static List getSniHostNames(List<String> names) {
-        if (names == null || names.isEmpty()) {
-            return Collections.emptyList();
-        }
         List<SNIServerName> sniServerNames = new ArrayList<SNIServerName>(names.size());
         for (String name: names) {
             sniServerNames.add(new SNIHostName(name));
         }
-        return sniServerNames;
-    }
-
-    static List getSniHostName(byte[] hostname) {
-        if (hostname == null || hostname.length == 0) {
-            return Collections.emptyList();
-        }
-        return Collections.singletonList(new SNIHostName(hostname));
+        sslParameters.setServerNames(sniServerNames);
     }
 
     static boolean getUseCipherSuitesOrder(SSLParameters sslParameters) {
@@ -86,7 +69,7 @@ final class Java8SslUtils {
     }
 
     @SuppressWarnings("unchecked")
-    static boolean checkSniHostnameMatch(Collection<?> matchers, byte[] hostname) {
+    static boolean checkSniHostnameMatch(Collection<?> matchers, String hostname) {
         if (matchers != null && !matchers.isEmpty()) {
             SNIHostName name = new SNIHostName(hostname);
             Iterator<SNIMatcher> matcherIt = (Iterator<SNIMatcher>) matchers.iterator();

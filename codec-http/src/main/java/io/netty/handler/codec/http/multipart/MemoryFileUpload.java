@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,9 +17,7 @@ package io.netty.handler.codec.http.multipart;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelException;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
-import io.netty.util.internal.ObjectUtil;
+import io.netty.handler.codec.http.HttpHeaders;
 
 import java.io.IOException;
 import java.nio.charset.Charset;
@@ -57,7 +55,10 @@ public class MemoryFileUpload extends AbstractMemoryHttpData implements FileUplo
 
     @Override
     public void setFilename(String filename) {
-        this.filename = ObjectUtil.checkNotNull(filename, "filename");
+        if (filename == null) {
+            throw new NullPointerException("filename");
+        }
+        this.filename = filename;
     }
 
     @Override
@@ -85,7 +86,10 @@ public class MemoryFileUpload extends AbstractMemoryHttpData implements FileUplo
 
     @Override
     public void setContentType(String contentType) {
-        this.contentType = ObjectUtil.checkNotNull(contentType, "contentType");
+        if (contentType == null) {
+            throw new NullPointerException("contentType");
+        }
+        this.contentType = contentType;
     }
 
     @Override
@@ -105,55 +109,24 @@ public class MemoryFileUpload extends AbstractMemoryHttpData implements FileUplo
 
     @Override
     public String toString() {
-        return HttpHeaderNames.CONTENT_DISPOSITION + ": " +
-               HttpHeaderValues.FORM_DATA + "; " + HttpHeaderValues.NAME + "=\"" + getName() +
-            "\"; " + HttpHeaderValues.FILENAME + "=\"" + filename + "\"\r\n" +
-            HttpHeaderNames.CONTENT_TYPE + ": " + contentType +
-            (getCharset() != null? "; " + HttpHeaderValues.CHARSET + '=' + getCharset().name() + "\r\n" : "\r\n") +
-            HttpHeaderNames.CONTENT_LENGTH + ": " + length() + "\r\n" +
+        return HttpPostBodyUtil.CONTENT_DISPOSITION + ": " +
+            HttpPostBodyUtil.FORM_DATA + "; " + HttpPostBodyUtil.NAME + "=\"" + getName() +
+            "\"; " + HttpPostBodyUtil.FILENAME + "=\"" + filename + "\"\r\n" +
+            HttpHeaders.Names.CONTENT_TYPE + ": " + contentType +
+            (charset != null? "; " + HttpHeaders.Values.CHARSET + '=' + charset.name() + "\r\n" : "\r\n") +
+            HttpHeaders.Names.CONTENT_LENGTH + ": " + length() + "\r\n" +
             "Completed: " + isCompleted() +
             "\r\nIsInMemory: " + isInMemory();
     }
 
     @Override
     public FileUpload copy() {
-        final ByteBuf content = content();
-        return replace(content != null ? content.copy() : content);
-    }
-
-    @Override
-    public FileUpload duplicate() {
-        final ByteBuf content = content();
-        return replace(content != null ? content.duplicate() : content);
-    }
-
-    @Override
-    public FileUpload retainedDuplicate() {
-        ByteBuf content = content();
-        if (content != null) {
-            content = content.retainedDuplicate();
-            boolean success = false;
+        MemoryFileUpload upload = new MemoryFileUpload(getName(), getFilename(), getContentType(),
+                getContentTransferEncoding(), getCharset(), size);
+        ByteBuf buf = content();
+        if (buf != null) {
             try {
-                FileUpload duplicate = replace(content);
-                success = true;
-                return duplicate;
-            } finally {
-                if (!success) {
-                    content.release();
-                }
-            }
-        } else {
-            return replace(null);
-        }
-    }
-
-    @Override
-    public FileUpload replace(ByteBuf content) {
-        MemoryFileUpload upload = new MemoryFileUpload(
-                getName(), getFilename(), getContentType(), getContentTransferEncoding(), getCharset(), size);
-        if (content != null) {
-            try {
-                upload.setContent(content);
+                upload.setContent(buf.copy());
                 return upload;
             } catch (IOException e) {
                 throw new ChannelException(e);
@@ -163,6 +136,21 @@ public class MemoryFileUpload extends AbstractMemoryHttpData implements FileUplo
     }
 
     @Override
+    public FileUpload duplicate() {
+        MemoryFileUpload upload = new MemoryFileUpload(getName(), getFilename(), getContentType(),
+                getContentTransferEncoding(), getCharset(), size);
+        ByteBuf buf = content();
+        if (buf != null) {
+            try {
+                upload.setContent(buf.duplicate());
+                return upload;
+            } catch (IOException e) {
+                throw new ChannelException(e);
+            }
+        }
+        return upload;
+    }
+    @Override
     public FileUpload retain() {
         super.retain();
         return this;
@@ -171,18 +159,6 @@ public class MemoryFileUpload extends AbstractMemoryHttpData implements FileUplo
     @Override
     public FileUpload retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public FileUpload touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public FileUpload touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,8 +20,6 @@ import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.EventLoop;
-import io.netty.channel.PreferHeapByteBufAllocator;
-import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
 import io.netty.channel.SingleThreadEventLoop;
 import io.netty.util.concurrent.SingleThreadEventExecutor;
@@ -47,10 +45,6 @@ public class LocalServerChannel extends AbstractServerChannel {
     private volatile int state; // 0 - open, 1 - active, 2 - closed
     private volatile LocalAddress localAddress;
     private volatile boolean acceptInProgress;
-
-    public LocalServerChannel() {
-        config().setAllocator(new PreferHeapByteBufAllocator(config.getAllocator()));
-    }
 
     @Override
     public ChannelConfig config() {
@@ -127,7 +121,15 @@ public class LocalServerChannel extends AbstractServerChannel {
             return;
         }
 
-        readInbound();
+        ChannelPipeline pipeline = pipeline();
+        for (;;) {
+            Object m = inboundBuffer.poll();
+            if (m == null) {
+                break;
+            }
+            pipeline.fireChannelRead(m);
+        }
+        pipeline.fireChannelReadComplete();
     }
 
     LocalChannel serve(final LocalChannel peer) {
@@ -136,28 +138,13 @@ public class LocalServerChannel extends AbstractServerChannel {
             serve0(child);
         } else {
             eventLoop().execute(new Runnable() {
-                @Override
-                public void run() {
-                    serve0(child);
-                }
+              @Override
+              public void run() {
+                serve0(child);
+              }
             });
         }
         return child;
-    }
-
-    private void readInbound() {
-        RecvByteBufAllocator.Handle handle = unsafe().recvBufAllocHandle();
-        handle.reset(config());
-        ChannelPipeline pipeline = pipeline();
-        do {
-            Object m = inboundBuffer.poll();
-            if (m == null) {
-                break;
-            }
-            pipeline.fireChannelRead(m);
-        } while (handle.continueReading());
-
-        pipeline.fireChannelReadComplete();
     }
 
     /**
@@ -172,8 +159,15 @@ public class LocalServerChannel extends AbstractServerChannel {
         inboundBuffer.add(child);
         if (acceptInProgress) {
             acceptInProgress = false;
-
-            readInbound();
+            ChannelPipeline pipeline = pipeline();
+            for (;;) {
+                Object m = inboundBuffer.poll();
+                if (m == null) {
+                    break;
+                }
+                pipeline.fireChannelRead(m);
+            }
+            pipeline.fireChannelReadComplete();
         }
     }
 }

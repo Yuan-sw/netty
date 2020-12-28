@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,27 +15,28 @@
  */
 package io.netty.handler.ssl;
 
-import static io.netty.handler.ssl.SslUtils.toSSLHandshakeException;
-import static io.netty.util.internal.ObjectUtil.checkNotNull;
-import static java.lang.Math.min;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufAllocator;
 import io.netty.handler.ssl.JdkApplicationProtocolNegotiator.ProtocolSelectionListener;
 import io.netty.handler.ssl.JdkApplicationProtocolNegotiator.ProtocolSelector;
-import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.LinkedHashSet;
-import java.util.List;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
-import javax.net.ssl.SSLException;
-
 import io.netty.util.internal.SystemPropertyUtil;
 import org.conscrypt.AllocatedBuffer;
 import org.conscrypt.BufferAllocator;
 import org.conscrypt.Conscrypt;
 import org.conscrypt.HandshakeListener;
+
+import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.LinkedHashSet;
+import java.util.List;
+
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLEngineResult;
+import javax.net.ssl.SSLException;
+
+import static io.netty.handler.ssl.SslUtils.toSSLHandshakeException;
+import static io.netty.util.internal.ObjectUtil.checkNotNull;
+import static java.lang.Math.min;
 
 /**
  * A {@link JdkSslEngine} that uses the Conscrypt provider or SSL with ALPN.
@@ -71,7 +72,7 @@ abstract class ConscryptAlpnSslEngine extends JdkSslEngine {
         }
 
         // Set the list of supported ALPN protocols on the engine.
-        Conscrypt.setApplicationProtocols(engine, protocols.toArray(new String[0]));
+        Conscrypt.setApplicationProtocols(engine, protocols.toArray(new String[protocols.size()]));
     }
 
     /**

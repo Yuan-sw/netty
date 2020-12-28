@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,20 +16,18 @@
 
 package io.netty.util.concurrent;
 
-import io.netty.util.internal.ObjectUtil;
-
 import java.util.LinkedHashSet;
 import java.util.Set;
 
 /**
- * @deprecated Use {@link PromiseCombiner#PromiseCombiner(EventExecutor)}.
+ * @deprecated Use {@link PromiseCombiner}
  *
  * {@link GenericFutureListener} implementation which consolidates multiple {@link Future}s
  * into one, by listening to individual {@link Future}s and producing an aggregated result
  * (success/failure) when all {@link Future}s have completed.
  *
- * @param <V> the type of value returned by the {@link Future}
- * @param <F> the type of {@link Future}
+ * @param V the type of value returned by the {@link Future}
+ * @param F the type of {@link Future}
  */
 @Deprecated
 public class PromiseAggregator<V, F extends Future<V>> implements GenericFutureListener<F> {
@@ -45,7 +43,10 @@ public class PromiseAggregator<V, F extends Future<V>> implements GenericFutureL
      * @param failPending  {@code true} to fail pending promises, false to leave them unaffected
      */
     public PromiseAggregator(Promise<Void> aggregatePromise, boolean failPending) {
-        this.aggregatePromise = ObjectUtil.checkNotNull(aggregatePromise, "aggregatePromise");
+        if (aggregatePromise == null) {
+            throw new NullPointerException("aggregatePromise");
+        }
+        this.aggregatePromise = aggregatePromise;
         this.failPending = failPending;
     }
 
@@ -62,7 +63,9 @@ public class PromiseAggregator<V, F extends Future<V>> implements GenericFutureL
      */
     @SafeVarargs
     public final PromiseAggregator<V, F> add(Promise<V>... promises) {
-        ObjectUtil.checkNotNull(promises, "promises");
+        if (promises == null) {
+            throw new NullPointerException("promises");
+        }
         if (promises.length == 0) {
             return this;
         }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,11 +17,7 @@ package io.netty.handler.codec.socks;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.util.CharsetUtil;
 import org.junit.Test;
-
-import java.net.IDN;
-import java.nio.CharBuffer;
 
 import static org.junit.Assert.*;
 
@@ -110,52 +106,6 @@ public class SocksCmdResponseTest {
                 0x50
         };
         assertByteBufEquals(expected, buffer);
-    }
-
-    @Test
-    public void testHostNotEncodedForUnknown() {
-        String asciiHost = "xn--e1aybc.xn--p1ai";
-        short port = 10000;
-
-        SocksCmdResponse rs = new SocksCmdResponse(SocksCmdStatus.SUCCESS, SocksAddressType.UNKNOWN, asciiHost, port);
-        assertEquals(asciiHost, rs.host());
-
-        ByteBuf buffer = Unpooled.buffer(16);
-        rs.encodeAsByteBuf(buffer);
-
-        buffer.resetReaderIndex();
-        assertEquals(SocksProtocolVersion.SOCKS5.byteValue(), buffer.readByte());
-        assertEquals(SocksCmdStatus.SUCCESS.byteValue(), buffer.readByte());
-        assertEquals((byte) 0x00, buffer.readByte());
-        assertEquals(SocksAddressType.UNKNOWN.byteValue(), buffer.readByte());
-        assertFalse(buffer.isReadable());
-
-        buffer.release();
-    }
-
-    @Test
-    public void testIDNEncodeToAsciiForDomain() {
-        String host = "тест.рф";
-        CharBuffer asciiHost = CharBuffer.wrap(IDN.toASCII(host));
-        short port = 10000;
-
-        SocksCmdResponse rs = new SocksCmdResponse(SocksCmdStatus.SUCCESS, SocksAddressType.DOMAIN, host, port);
-        assertEquals(host, rs.host());
-
-        ByteBuf buffer = Unpooled.buffer(24);
-        rs.encodeAsByteBuf(buffer);
-
-        buffer.resetReaderIndex();
-        assertEquals(SocksProtocolVersion.SOCKS5.byteValue(), buffer.readByte());
-        assertEquals(SocksCmdStatus.SUCCESS.byteValue(), buffer.readByte());
-        assertEquals((byte) 0x00, buffer.readByte());
-        assertEquals(SocksAddressType.DOMAIN.byteValue(), buffer.readByte());
-        assertEquals((byte) asciiHost.length(), buffer.readUnsignedByte());
-        assertEquals(asciiHost,
-            CharBuffer.wrap(buffer.readCharSequence(asciiHost.length(), CharsetUtil.US_ASCII)));
-        assertEquals(port, buffer.readUnsignedShort());
-
-        buffer.release();
     }
 
     /**

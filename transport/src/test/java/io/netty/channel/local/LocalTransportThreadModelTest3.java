@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,7 +23,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPromise;
-import io.netty.channel.DefaultEventLoopGroup;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.DefaultEventExecutorGroup;
@@ -63,7 +62,7 @@ public class LocalTransportThreadModelTest3 {
     @BeforeClass
     public static void init() {
         // Configure a test server
-        group = new DefaultEventLoopGroup();
+        group = new LocalEventLoopGroup();
         ServerBootstrap sb = new ServerBootstrap();
         sb.group(group)
                 .channel(LocalServerChannel.class)
@@ -117,7 +116,7 @@ public class LocalTransportThreadModelTest3 {
     }
 
     private static void testConcurrentAddRemove(boolean inbound) throws Exception {
-        EventLoopGroup l = new DefaultEventLoopGroup(4, new DefaultThreadFactory("l"));
+        EventLoopGroup l = new LocalEventLoopGroup(4, new DefaultThreadFactory("l"));
         EventExecutorGroup e1 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e1"));
         EventExecutorGroup e2 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e2"));
         EventExecutorGroup e3 = new DefaultEventExecutorGroup(4, new DefaultThreadFactory("e3"));
@@ -211,7 +210,7 @@ public class LocalTransportThreadModelTest3 {
             for (;;) {
                 EventType event = events.poll();
                 if (event == null) {
-                    Assert.assertTrue("Missing events:" + expectedEvents, expectedEvents.isEmpty());
+                    Assert.assertTrue("Missing events:" + expectedEvents.toString(), expectedEvents.isEmpty());
                     break;
                 }
                 Assert.assertEquals(event, expectedEvents.poll());
@@ -259,7 +258,7 @@ public class LocalTransportThreadModelTest3 {
         private final Queue<EventType> events;
         private final boolean inbound;
 
-        EventRecorder(Queue<EventType> events, boolean inbound) {
+        public EventRecorder(Queue<EventType> events, boolean inbound) {
             this.events = events;
             this.inbound = inbound;
         }

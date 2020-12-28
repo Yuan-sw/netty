@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,6 @@ import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannelConfig;
 import io.netty.util.internal.PlatformDependent;
 
@@ -28,16 +27,11 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Map;
 
-import static io.netty.channel.ChannelOption.ALLOW_HALF_CLOSURE;
-import static io.netty.channel.ChannelOption.IP_TOS;
-import static io.netty.channel.ChannelOption.SO_KEEPALIVE;
-import static io.netty.channel.ChannelOption.SO_LINGER;
-import static io.netty.channel.ChannelOption.SO_RCVBUF;
-import static io.netty.channel.ChannelOption.SO_REUSEADDR;
-import static io.netty.channel.ChannelOption.SO_SNDBUF;
-import static io.netty.channel.ChannelOption.TCP_NODELAY;
+import static io.netty.channel.ChannelOption.*;
 
 public final class EpollSocketChannelConfig extends EpollChannelConfig implements SocketChannelConfig {
+    private static final long MAX_UINT32_T = 0xFFFFFFFFL;
+    private final EpollSocketChannel channel;
     private volatile boolean allowHalfClosure;
 
     /**
@@ -46,10 +40,12 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     EpollSocketChannelConfig(EpollSocketChannel channel) {
         super(channel);
 
+        this.channel = channel;
         if (PlatformDependent.canEnableTcpNoDelayByDefault()) {
             setTcpNoDelay(true);
         }
-        calculateMaxBytesPerGatheringWrite();
+        // Make it consistent with NIO.
+        setMaxMessagesPerRead(16);
     }
 
     @Override
@@ -59,8 +55,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
                 SO_RCVBUF, SO_SNDBUF, TCP_NODELAY, SO_KEEPALIVE, SO_REUSEADDR, SO_LINGER, IP_TOS,
                 ALLOW_HALF_CLOSURE, EpollChannelOption.TCP_CORK, EpollChannelOption.TCP_NOTSENT_LOWAT,
                 EpollChannelOption.TCP_KEEPCNT, EpollChannelOption.TCP_KEEPIDLE, EpollChannelOption.TCP_KEEPINTVL,
-                EpollChannelOption.TCP_MD5SIG, EpollChannelOption.TCP_QUICKACK, EpollChannelOption.IP_TRANSPARENT,
-                EpollChannelOption.TCP_FASTOPEN_CONNECT, EpollChannelOption.SO_BUSY_POLL);
+                EpollChannelOption.TCP_MD5SIG, EpollChannelOption.TCP_QUICKACK);
     }
 
     @SuppressWarnings("unchecked")
@@ -111,15 +106,6 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
         if (option == EpollChannelOption.TCP_QUICKACK) {
             return (T) Boolean.valueOf(isTcpQuickAck());
         }
-        if (option == EpollChannelOption.IP_TRANSPARENT) {
-            return (T) Boolean.valueOf(isIpTransparent());
-        }
-        if (option == EpollChannelOption.TCP_FASTOPEN_CONNECT) {
-            return (T) Boolean.valueOf(isTcpFastOpenConnect());
-        }
-        if (option == EpollChannelOption.SO_BUSY_POLL) {
-            return (T) Integer.valueOf(getSoBusyPoll());
-        }
         return super.getOption(option);
     }
 
@@ -155,18 +141,12 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
             setTcpKeepIntvl((Integer) value);
         } else if (option == EpollChannelOption.TCP_USER_TIMEOUT) {
             setTcpUserTimeout((Integer) value);
-        } else if (option == EpollChannelOption.IP_TRANSPARENT) {
-            setIpTransparent((Boolean) value);
         } else if (option == EpollChannelOption.TCP_MD5SIG) {
             @SuppressWarnings("unchecked")
             final Map<InetAddress, byte[]> m = (Map<InetAddress, byte[]>) value;
             setTcpMd5Sig(m);
         } else if (option == EpollChannelOption.TCP_QUICKACK) {
             setTcpQuickAck((Boolean) value);
-        } else if (option == EpollChannelOption.TCP_FASTOPEN_CONNECT) {
-            setTcpFastOpenConnect((Boolean) value);
-        } else if (option == EpollChannelOption.SO_BUSY_POLL) {
-            setSoBusyPoll((Integer) value);
         } else {
             return super.setOption(option, value);
         }
@@ -177,7 +157,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public int getReceiveBufferSize() {
         try {
-            return ((EpollSocketChannel) channel).socket.getReceiveBufferSize();
+            return channel.fd().getReceiveBufferSize();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -186,7 +166,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public int getSendBufferSize() {
         try {
-            return ((EpollSocketChannel) channel).socket.getSendBufferSize();
+            return channel.fd().getSendBufferSize();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -195,7 +175,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public int getSoLinger() {
         try {
-            return ((EpollSocketChannel) channel).socket.getSoLinger();
+            return channel.fd().getSoLinger();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -204,7 +184,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public int getTrafficClass() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTrafficClass();
+            return Native.getTrafficClass(channel.fd().intValue());
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -213,7 +193,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public boolean isKeepAlive() {
         try {
-            return ((EpollSocketChannel) channel).socket.isKeepAlive();
+            return channel.fd().isKeepAlive();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -222,7 +202,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public boolean isReuseAddress() {
         try {
-            return ((EpollSocketChannel) channel).socket.isReuseAddress();
+            return Native.isReuseAddress(channel.fd().intValue()) == 1;
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -231,7 +211,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public boolean isTcpNoDelay() {
         try {
-            return ((EpollSocketChannel) channel).socket.isTcpNoDelay();
+            return channel.fd().isTcpNoDelay();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -242,18 +222,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public boolean isTcpCork() {
         try {
-            return ((EpollSocketChannel) channel).socket.isTcpCork();
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-    /**
-     * Get the {@code SO_BUSY_POLL} option on the socket. See {@code man 7 tcp} for more details.
-     */
-    public int getSoBusyPoll() {
-        try {
-            return ((EpollSocketChannel) channel).socket.getSoBusyPoll();
+            return channel.fd().isTcpCork();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -265,7 +234,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public long getTcpNotSentLowAt() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTcpNotSentLowAt();
+            return Native.getTcpNotSentLowAt(channel.fd().intValue()) & MAX_UINT32_T;
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -276,7 +245,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public int getTcpKeepIdle() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTcpKeepIdle();
+            return Native.getTcpKeepIdle(channel.fd().intValue());
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -287,7 +256,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public int getTcpKeepIntvl() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTcpKeepIntvl();
+            return Native.getTcpKeepIntvl(channel.fd().intValue());
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -298,7 +267,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public int getTcpKeepCnt() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTcpKeepCnt();
+            return Native.getTcpKeepCnt(channel.fd().intValue());
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -309,7 +278,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public int getTcpUserTimeout() {
         try {
-            return ((EpollSocketChannel) channel).socket.getTcpUserTimeout();
+        return Native.getTcpUserTimeout(channel.fd().intValue());
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -318,7 +287,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setKeepAlive(boolean keepAlive) {
         try {
-            ((EpollSocketChannel) channel).socket.setKeepAlive(keepAlive);
+            channel.fd().setKeepAlive(keepAlive);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -334,7 +303,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setReceiveBufferSize(int receiveBufferSize) {
         try {
-            ((EpollSocketChannel) channel).socket.setReceiveBufferSize(receiveBufferSize);
+            channel.fd().setReceiveBufferSize(receiveBufferSize);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -344,7 +313,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setReuseAddress(boolean reuseAddress) {
         try {
-            ((EpollSocketChannel) channel).socket.setReuseAddress(reuseAddress);
+            Native.setReuseAddress(channel.fd().intValue(), reuseAddress ? 1 : 0);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -354,8 +323,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setSendBufferSize(int sendBufferSize) {
         try {
-            ((EpollSocketChannel) channel).socket.setSendBufferSize(sendBufferSize);
-            calculateMaxBytesPerGatheringWrite();
+            channel.fd().setSendBufferSize(sendBufferSize);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -365,7 +333,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setSoLinger(int soLinger) {
         try {
-            ((EpollSocketChannel) channel).socket.setSoLinger(soLinger);
+            channel.fd().setSoLinger(soLinger);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -375,7 +343,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setTcpNoDelay(boolean tcpNoDelay) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpNoDelay(tcpNoDelay);
+            channel.fd().setTcpNoDelay(tcpNoDelay);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -387,19 +355,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpCork(boolean tcpCork) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpCork(tcpCork);
-            return this;
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-    /**
-     * Set the {@code SO_BUSY_POLL} option on the socket. See {@code man 7 tcp} for more details.
-     */
-    public EpollSocketChannelConfig setSoBusyPoll(int loopMicros) {
-        try {
-            ((EpollSocketChannel) channel).socket.setSoBusyPoll(loopMicros);
+            channel.fd().setTcpCork(tcpCork);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -411,8 +367,11 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      * @param tcpNotSentLowAt is a uint32_t
      */
     public EpollSocketChannelConfig setTcpNotSentLowAt(long tcpNotSentLowAt) {
+        if (tcpNotSentLowAt < 0 || tcpNotSentLowAt > MAX_UINT32_T) {
+            throw new IllegalArgumentException("tcpNotSentLowAt must be a uint32_t");
+        }
         try {
-            ((EpollSocketChannel) channel).socket.setTcpNotSentLowAt(tcpNotSentLowAt);
+            Native.setTcpNotSentLowAt(channel.fd().intValue(), (int) tcpNotSentLowAt);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -422,7 +381,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     @Override
     public EpollSocketChannelConfig setTrafficClass(int trafficClass) {
         try {
-            ((EpollSocketChannel) channel).socket.setTrafficClass(trafficClass);
+            Native.setTrafficClass(channel.fd().intValue(), trafficClass);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -434,7 +393,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpKeepIdle(int seconds) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpKeepIdle(seconds);
+            Native.setTcpKeepIdle(channel.fd().intValue(), seconds);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -446,7 +405,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpKeepIntvl(int seconds) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpKeepIntvl(seconds);
+            Native.setTcpKeepIntvl(channel.fd().intValue(), seconds);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -466,7 +425,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpKeepCnt(int probes) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpKeepCnt(probes);
+            Native.setTcpKeepCnt(channel.fd().intValue(), probes);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -478,32 +437,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpUserTimeout(int milliseconds) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpUserTimeout(milliseconds);
-            return this;
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-     /**
-     * Returns {@code true} if <a href="https://man7.org/linux/man-pages/man7/ip.7.html">IP_TRANSPARENT</a> is enabled,
-     * {@code false} otherwise.
-     */
-    public boolean isIpTransparent() {
-        try {
-            return ((EpollSocketChannel) channel).socket.isIpTransparent();
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-    /**
-     * If {@code true} is used <a href="https://man7.org/linux/man-pages/man7/ip.7.html">IP_TRANSPARENT</a> is enabled,
-     * {@code false} for disable it. Default is disabled.
-     */
-    public EpollSocketChannelConfig setIpTransparent(boolean transparent) {
-        try {
-            ((EpollSocketChannel) channel).socket.setIpTransparent(transparent);
+            Native.setTcpUserTimeout(channel.fd().intValue(), milliseconds);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -517,7 +451,7 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
      */
     public EpollSocketChannelConfig setTcpMd5Sig(Map<InetAddress, byte[]> keys) {
         try {
-            ((EpollSocketChannel) channel).setTcpMd5Sig(keys);
+            channel.setTcpMd5Sig(keys);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -525,13 +459,12 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     }
 
     /**
-     * Set the {@code TCP_QUICKACK} option on the socket.
-     * See <a href="https://linux.die.net//man/7/tcp">TCP_QUICKACK</a>
+     * Set the {@code TCP_QUICKACK} option on the socket. See <a href="http://linux.die.net/man/7/tcp">TCP_QUICKACK</a>
      * for more details.
      */
     public EpollSocketChannelConfig setTcpQuickAck(boolean quickAck) {
         try {
-            ((EpollSocketChannel) channel).socket.setTcpQuickAck(quickAck);
+            channel.fd().setTcpQuickAck(quickAck);
             return this;
         } catch (IOException e) {
             throw new ChannelException(e);
@@ -539,38 +472,12 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     }
 
     /**
-     * Returns {@code true} if <a href="https://linux.die.net//man/7/tcp">TCP_QUICKACK</a> is enabled,
+     * Returns {@code true} if <a href="http://linux.die.net/man/7/tcp">TCP_QUICKACK</a> is enabled,
      * {@code false} otherwise.
      */
     public boolean isTcpQuickAck() {
         try {
-            return ((EpollSocketChannel) channel).socket.isTcpQuickAck();
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-    /**
-     * Set the {@code TCP_FASTOPEN_CONNECT} option on the socket. Requires Linux kernel 4.11 or later.
-     * See
-     * <a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=19f6d3f3">this commit</a>
-     * for more details.
-     */
-    public EpollSocketChannelConfig setTcpFastOpenConnect(boolean fastOpenConnect) {
-        try {
-            ((EpollSocketChannel) channel).socket.setTcpFastOpenConnect(fastOpenConnect);
-            return this;
-        } catch (IOException e) {
-            throw new ChannelException(e);
-        }
-    }
-
-    /**
-     * Returns {@code true} if {@code TCP_FASTOPEN_CONNECT} is enabled, {@code false} otherwise.
-     */
-    public boolean isTcpFastOpenConnect() {
-        try {
-            return ((EpollSocketChannel) channel).socket.isTcpFastOpenConnect();
+            return channel.fd().isTcpQuickAck();
         } catch (IOException e) {
             throw new ChannelException(e);
         }
@@ -594,7 +501,6 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     }
 
     @Override
-    @Deprecated
     public EpollSocketChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead) {
         super.setMaxMessagesPerRead(maxMessagesPerRead);
         return this;
@@ -631,22 +537,14 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     }
 
     @Override
-    @Deprecated
     public EpollSocketChannelConfig setWriteBufferHighWaterMark(int writeBufferHighWaterMark) {
         super.setWriteBufferHighWaterMark(writeBufferHighWaterMark);
         return this;
     }
 
     @Override
-    @Deprecated
     public EpollSocketChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
         super.setWriteBufferLowWaterMark(writeBufferLowWaterMark);
-        return this;
-    }
-
-    @Override
-    public EpollSocketChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark) {
-        super.setWriteBufferWaterMark(writeBufferWaterMark);
         return this;
     }
 
@@ -660,13 +558,5 @@ public final class EpollSocketChannelConfig extends EpollChannelConfig implement
     public EpollSocketChannelConfig setEpollMode(EpollMode mode) {
         super.setEpollMode(mode);
         return this;
-    }
-
-    private void calculateMaxBytesPerGatheringWrite() {
-        // Multiply by 2 to give some extra space in case the OS can process write data faster than we can provide.
-        int newSendBufferSize = getSendBufferSize() << 1;
-        if (newSendBufferSize > 0) {
-            setMaxBytesPerGatheringWrite(getSendBufferSize() << 1);
-        }
     }
 }

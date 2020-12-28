@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,7 +23,6 @@ import org.junit.Test;
 import static io.netty.buffer.Unpooled.*;
 import static org.hamcrest.core.Is.*;
 import static org.hamcrest.core.IsNull.*;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
 
 public class ProtobufVarint32FrameDecoderTest {
@@ -38,14 +37,15 @@ public class ProtobufVarint32FrameDecoderTest {
     @Test
     public void testTinyDecode() {
         byte[] b = { 4, 1, 1, 1, 1 };
-        assertFalse(ch.writeInbound(wrappedBuffer(b, 0, 1)));
+        ch.writeInbound(wrappedBuffer(b, 0, 1));
         assertThat(ch.readInbound(), is(nullValue()));
-        assertFalse(ch.writeInbound(wrappedBuffer(b, 1, 2)));
+        ch.writeInbound(wrappedBuffer(b, 1, 2));
         assertThat(ch.readInbound(), is(nullValue()));
+
         assertTrue(ch.writeInbound(wrappedBuffer(b, 3, b.length - 3)));
 
         ByteBuf expected = wrappedBuffer(new byte[] { 1, 1, 1, 1 });
-        ByteBuf actual = ch.readInbound();
+        ByteBuf actual = (ByteBuf) ch.readInbound();
 
         assertThat(expected, is(actual));
         assertFalse(ch.finish());
@@ -62,18 +62,19 @@ public class ProtobufVarint32FrameDecoderTest {
         }
         b[0] = -2;
         b[1] = 15;
-        assertFalse(ch.writeInbound(wrappedBuffer(b, 0, 1)));
+        ch.writeInbound(wrappedBuffer(b, 0, 127));
         assertThat(ch.readInbound(), is(nullValue()));
-        assertFalse(ch.writeInbound(wrappedBuffer(b, 1, 127)));
+        ch.writeInbound(wrappedBuffer(b, 127, 600));
         assertThat(ch.readInbound(), is(nullValue()));
+
         assertFalse(ch.writeInbound(wrappedBuffer(b, 127, 600)));
         assertThat(ch.readInbound(), is(nullValue()));
         assertTrue(ch.writeInbound(wrappedBuffer(b, 727, b.length - 727)));
 
         ByteBuf expected = wrappedBuffer(b, 2, b.length - 2);
-        ByteBuf actual = ch.readInbound();
+        ByteBuf actual = (ByteBuf) ch.readInbound();
         assertThat(expected, is(actual));
-        assertFalse(ch.finish());
+        assertTrue(ch.finishAndReleaseAll());
 
         expected.release();
         actual.release();

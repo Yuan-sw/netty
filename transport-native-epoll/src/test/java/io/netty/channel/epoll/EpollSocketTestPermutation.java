@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,16 +16,15 @@
 package io.netty.channel.epoll;
 
 import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ChannelFactory;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFactory;
 import io.netty.channel.EventLoopGroup;
 import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.channel.socket.nio.NioDatagramChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.channel.unix.DomainSocketAddress;
-import io.netty.channel.unix.tests.UnixTestUtils;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.testsuite.transport.TestsuitePermutation.BootstrapFactory;
 import io.netty.testsuite.transport.socket.SocketTestPermutation;
@@ -36,6 +35,7 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
+import java.io.IOException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.ArrayList;
@@ -118,8 +118,7 @@ class EpollSocketTestPermutation extends SocketTestPermutation {
     }
 
     @Override
-    public List<TestsuitePermutation.BootstrapComboFactory<Bootstrap, Bootstrap>> datagram(
-            final InternetProtocolFamily family) {
+    public List<TestsuitePermutation.BootstrapComboFactory<Bootstrap, Bootstrap>> datagram() {
         // Make the list of Bootstrap factories.
         @SuppressWarnings("unchecked")
         List<BootstrapFactory<Bootstrap>> bfs = Arrays.asList(
@@ -129,7 +128,7 @@ class EpollSocketTestPermutation extends SocketTestPermutation {
                         return new Bootstrap().group(nioWorkerGroup).channelFactory(new ChannelFactory<Channel>() {
                             @Override
                             public Channel newChannel() {
-                                return new NioDatagramChannel(family);
+                                return new NioDatagramChannel(InternetProtocolFamily.IPv4);
                             }
 
                             @Override
@@ -142,46 +141,11 @@ class EpollSocketTestPermutation extends SocketTestPermutation {
                 new BootstrapFactory<Bootstrap>() {
                     @Override
                     public Bootstrap newInstance() {
-                        return new Bootstrap().group(EPOLL_WORKER_GROUP).channelFactory(new ChannelFactory<Channel>() {
-                            @Override
-                            public Channel newChannel() {
-                                return new EpollDatagramChannel(family);
-                            }
-
-                            @Override
-                            public String toString() {
-                                return InternetProtocolFamily.class.getSimpleName() + ".class";
-                            }
-                        });
+                        return new Bootstrap().group(EPOLL_WORKER_GROUP).channel(EpollDatagramChannel.class);
                     }
                 }
         );
         return combo(bfs, bfs);
-    }
-
-    List<TestsuitePermutation.BootstrapComboFactory<Bootstrap, Bootstrap>> epollOnlyDatagram(
-            final InternetProtocolFamily family) {
-        return combo(Collections.singletonList(datagramBootstrapFactory(family)),
-                Collections.singletonList(datagramBootstrapFactory(family)));
-    }
-
-    private BootstrapFactory<Bootstrap> datagramBootstrapFactory(final InternetProtocolFamily family) {
-        return new BootstrapFactory<Bootstrap>() {
-            @Override
-            public Bootstrap newInstance() {
-                return new Bootstrap().group(EPOLL_WORKER_GROUP).channelFactory(new ChannelFactory<Channel>() {
-                    @Override
-                    public Channel newChannel() {
-                        return new EpollDatagramChannel(family);
-                    }
-
-                    @Override
-                    public String toString() {
-                        return InternetProtocolFamily.class.getSimpleName() + ".class";
-                    }
-                });
-            }
-        };
     }
 
     public List<TestsuitePermutation.BootstrapComboFactory<ServerBootstrap, Bootstrap>> domainSocket() {
@@ -262,6 +226,12 @@ class EpollSocketTestPermutation extends SocketTestPermutation {
     }
 
     public static DomainSocketAddress newSocketAddress() {
-        return UnixTestUtils.newSocketAddress();
+        try {
+            File file = File.createTempFile("netty", "dsocket");
+            file.delete();
+            return new DomainSocketAddress(file);
+        } catch (IOException e) {
+            throw new IllegalStateException(e);
+        }
     }
 }

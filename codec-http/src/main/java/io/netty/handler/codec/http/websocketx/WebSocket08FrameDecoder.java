@@ -1,11 +1,11 @@
 /*
- * Copyright 2019 The Netty Project
+ * Copyright 2012 The Netty Project
  *
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations
  * under the License.
  */
-// (BSD License: https://www.opensource.org/licenses/bsd-license)
+// (BSD License: http://www.opensource.org/licenses/bsd-license)
 //
 // Copyright (c) 2011, Joe Walnes and contributors
 // All rights reserved.
@@ -57,32 +57,21 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ByteToMessageDecoder;
+import io.netty.handler.codec.CorruptedFrameException;
+import io.netty.handler.codec.ReplayingDecoder;
 import io.netty.handler.codec.TooLongFrameException;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
 
 import java.nio.ByteOrder;
 import java.util.List;
 
-import static io.netty.buffer.ByteBufUtil.readBytes;
-
 /**
  * Decodes a web socket frame from wire protocol version 8 format. This code was forked from <a
  * href="https://github.com/joewalnes/webbit">webbit</a> and modified.
  */
-public class WebSocket08FrameDecoder extends ByteToMessageDecoder
+public class WebSocket08FrameDecoder extends ReplayingDecoder<WebSocket08FrameDecoder.State>
         implements WebSocketFrameDecoder {
-
-    enum State {
-        READING_FIRST,
-        READING_SECOND,
-        READING_SIZE,
-        MASKING_KEY,
-        PAYLOAD,
-        CORRUPT
-    }
 
     private static final InternalLogger logger = InternalLoggerFactory.getInstance(WebSocket08FrameDecoder.class);
 
@@ -93,23 +82,29 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
     private static final byte OPCODE_PING = 0x9;
     private static final byte OPCODE_PONG = 0xA;
 
-    private final WebSocketDecoderConfig config;
-
     private int fragmentedFramesCount;
+    private final long maxFramePayloadLength;
     private boolean frameFinalFlag;
-    private boolean frameMasked;
     private int frameRsv;
     private int frameOpcode;
     private long framePayloadLength;
+    private ByteBuf framePayload;
+    private int framePayloadBytesRead;
     private byte[] maskingKey;
-    private int framePayloadLen1;
+    private ByteBuf payloadBuffer;
+    private final boolean allowExtensions;
+    private final boolean maskedPayload;
     private boolean receivedClosingHandshake;
-    private State state = State.READING_FIRST;
+    private Utf8Validator utf8Validator;
+
+    enum State {
+        FRAME_START, MASKING_KEY, PAYLOAD, CORRUPT
+    }
 
     /**
      * Constructor
      *
-     * @param expectMaskedFrames
+     * @param maskedPayload
      *            Web socket servers must set this to true processed incoming masked payload. Client implementations
      *            must set this to false.
      * @param allowExtensions
@@ -118,275 +113,292 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
      *            Maximum length of a frame's payload. Setting this to an appropriate value for you application
      *            helps check for denial of services attacks.
      */
-    public WebSocket08FrameDecoder(boolean expectMaskedFrames, boolean allowExtensions, int maxFramePayloadLength) {
-        this(expectMaskedFrames, allowExtensions, maxFramePayloadLength, false);
-    }
-
-    /**
-     * Constructor
-     *
-     * @param expectMaskedFrames
-     *            Web socket servers must set this to true processed incoming masked payload. Client implementations
-     *            must set this to false.
-     * @param allowExtensions
-     *            Flag to allow reserved extension bits to be used or not
-     * @param maxFramePayloadLength
-     *            Maximum length of a frame's payload. Setting this to an appropriate value for you application
-     *            helps check for denial of services attacks.
-     * @param allowMaskMismatch
-     *            When set to true, frames which are not masked properly according to the standard will still be
-     *            accepted.
-     */
-    public WebSocket08FrameDecoder(boolean expectMaskedFrames, boolean allowExtensions, int maxFramePayloadLength,
-                                   boolean allowMaskMismatch) {
-        this(WebSocketDecoderConfig.newBuilder()
-            .expectMaskedFrames(expectMaskedFrames)
-            .allowExtensions(allowExtensions)
-            .maxFramePayloadLength(maxFramePayloadLength)
-            .allowMaskMismatch(allowMaskMismatch)
-            .build());
-    }
-
-    /**
-     * Constructor
-     *
-     * @param decoderConfig
-     *            Frames decoder configuration.
-     */
-    public WebSocket08FrameDecoder(WebSocketDecoderConfig decoderConfig) {
-        this.config = ObjectUtil.checkNotNull(decoderConfig, "decoderConfig");
+    public WebSocket08FrameDecoder(boolean maskedPayload, boolean allowExtensions, int maxFramePayloadLength) {
+        super(State.FRAME_START);
+        this.maskedPayload = maskedPayload;
+        this.allowExtensions = allowExtensions;
+        this.maxFramePayloadLength = maxFramePayloadLength;
     }
 
     @Override
     protected void decode(ChannelHandlerContext ctx, ByteBuf in, List<Object> out) throws Exception {
+
         // Discard all data received if closing handshake was received before.
         if (receivedClosingHandshake) {
             in.skipBytes(actualReadableBytes());
             return;
         }
 
-        switch (state) {
-        case READING_FIRST:
-            if (!in.isReadable()) {
-                return;
-            }
-
-            framePayloadLength = 0;
-
-            // FIN, RSV, OPCODE
-            byte b = in.readByte();
-            frameFinalFlag = (b & 0x80) != 0;
-            frameRsv = (b & 0x70) >> 4;
-            frameOpcode = b & 0x0F;
-
-            if (logger.isTraceEnabled()) {
-                logger.trace("Decoding WebSocket Frame opCode={}", frameOpcode);
-            }
-
-            state = State.READING_SECOND;
-        case READING_SECOND:
-            if (!in.isReadable()) {
-                return;
-            }
-            // MASK, PAYLOAD LEN 1
-            b = in.readByte();
-            frameMasked = (b & 0x80) != 0;
-            framePayloadLen1 = b & 0x7F;
-
-            if (frameRsv != 0 && !config.allowExtensions()) {
-                protocolViolation(ctx, in, "RSV != 0 and no extension negotiated, RSV:" + frameRsv);
-                return;
-            }
-
-            if (!config.allowMaskMismatch() && config.expectMaskedFrames() != frameMasked) {
-                protocolViolation(ctx, in, "received a frame that is not masked as expected");
-                return;
-            }
-
-            if (frameOpcode > 7) { // control frame (have MSB in opcode set)
-
-                // control frames MUST NOT be fragmented
-                if (!frameFinalFlag) {
-                    protocolViolation(ctx, in, "fragmented control frame");
-                    return;
-                }
-
-                // control frames MUST have payload 125 octets or less
-                if (framePayloadLen1 > 125) {
-                    protocolViolation(ctx, in, "control frame with payload length > 125 octets");
-                    return;
-                }
-
-                // check for reserved control frame opcodes
-                if (!(frameOpcode == OPCODE_CLOSE || frameOpcode == OPCODE_PING
-                      || frameOpcode == OPCODE_PONG)) {
-                    protocolViolation(ctx, in, "control frame using reserved opcode " + frameOpcode);
-                    return;
-                }
-
-                // close frame : if there is a body, the first two bytes of the
-                // body MUST be a 2-byte unsigned integer (in network byte
-                // order) representing a getStatus code
-                if (frameOpcode == 8 && framePayloadLen1 == 1) {
-                    protocolViolation(ctx, in, "received close control frame with payload len 1");
-                    return;
-                }
-            } else { // data frame
-                // check for reserved data frame opcodes
-                if (!(frameOpcode == OPCODE_CONT || frameOpcode == OPCODE_TEXT
-                      || frameOpcode == OPCODE_BINARY)) {
-                    protocolViolation(ctx, in, "data frame using reserved opcode " + frameOpcode);
-                    return;
-                }
-
-                // check opcode vs message fragmentation state 1/2
-                if (fragmentedFramesCount == 0 && frameOpcode == OPCODE_CONT) {
-                    protocolViolation(ctx, in, "received continuation data frame outside fragmented message");
-                    return;
-                }
-
-                // check opcode vs message fragmentation state 2/2
-                if (fragmentedFramesCount != 0 && frameOpcode != OPCODE_CONT && frameOpcode != OPCODE_PING) {
-                    protocolViolation(ctx, in,
-                                      "received non-continuation data frame while inside fragmented message");
-                    return;
-                }
-            }
-
-            state = State.READING_SIZE;
-        case READING_SIZE:
-
-            // Read frame payload length
-            if (framePayloadLen1 == 126) {
-                if (in.readableBytes() < 2) {
-                    return;
-                }
-                framePayloadLength = in.readUnsignedShort();
-                if (framePayloadLength < 126) {
-                    protocolViolation(ctx, in, "invalid data frame length (not using minimal length encoding)");
-                    return;
-                }
-            } else if (framePayloadLen1 == 127) {
-                if (in.readableBytes() < 8) {
-                    return;
-                }
-                framePayloadLength = in.readLong();
-                // TODO: check if it's bigger than 0x7FFFFFFFFFFFFFFF, Maybe
-                // just check if it's negative?
-
-                if (framePayloadLength < 65536) {
-                    protocolViolation(ctx, in, "invalid data frame length (not using minimal length encoding)");
-                    return;
-                }
-            } else {
-                framePayloadLength = framePayloadLen1;
-            }
-
-            if (framePayloadLength > config.maxFramePayloadLength()) {
-                protocolViolation(ctx, in, WebSocketCloseStatus.MESSAGE_TOO_BIG,
-                    "Max frame length of " + config.maxFramePayloadLength() + " has been exceeded.");
-                return;
-            }
-
-            if (logger.isTraceEnabled()) {
-                logger.trace("Decoding WebSocket Frame length={}", framePayloadLength);
-            }
-
-            state = State.MASKING_KEY;
-        case MASKING_KEY:
-            if (frameMasked) {
-                if (in.readableBytes() < 4) {
-                    return;
-                }
-                if (maskingKey == null) {
-                    maskingKey = new byte[4];
-                }
-                in.readBytes(maskingKey);
-            }
-            state = State.PAYLOAD;
-        case PAYLOAD:
-            if (in.readableBytes() < framePayloadLength) {
-                return;
-            }
-
-            ByteBuf payloadBuffer = null;
-            try {
-                payloadBuffer = readBytes(ctx.alloc(), in, toFrameLength(framePayloadLength));
-
-                // Now we have all the data, the next checkpoint must be the next
-                // frame
-                state = State.READING_FIRST;
-
-                // Unmask data if needed
-                if (frameMasked) {
-                    unmask(payloadBuffer);
-                }
-
-                // Processing ping/pong/close frames because they cannot be
-                // fragmented
-                if (frameOpcode == OPCODE_PING) {
-                    out.add(new PingWebSocketFrame(frameFinalFlag, frameRsv, payloadBuffer));
+        try {
+            switch (state()) {
+                case FRAME_START:
+                    framePayloadBytesRead = 0;
+                    framePayloadLength = -1;
+                    framePayload = null;
                     payloadBuffer = null;
-                    return;
-                }
-                if (frameOpcode == OPCODE_PONG) {
-                    out.add(new PongWebSocketFrame(frameFinalFlag, frameRsv, payloadBuffer));
-                    payloadBuffer = null;
-                    return;
-                }
-                if (frameOpcode == OPCODE_CLOSE) {
-                    receivedClosingHandshake = true;
-                    checkCloseFrameBody(ctx, payloadBuffer);
-                    out.add(new CloseWebSocketFrame(frameFinalFlag, frameRsv, payloadBuffer));
-                    payloadBuffer = null;
-                    return;
-                }
 
-                // Processing for possible fragmented messages for text and binary
-                // frames
-                if (frameFinalFlag) {
-                    // Final frame of the sequence. Apparently ping frames are
-                    // allowed in the middle of a fragmented message
-                    if (frameOpcode != OPCODE_PING) {
-                        fragmentedFramesCount = 0;
+                    // FIN, RSV, OPCODE
+                    byte b = in.readByte();
+                    frameFinalFlag = (b & 0x80) != 0;
+                    frameRsv = (b & 0x70) >> 4;
+                    frameOpcode = b & 0x0F;
+
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Decoding WebSocket Frame opCode={}", frameOpcode);
                     }
-                } else {
-                    // Increment counter
-                    fragmentedFramesCount++;
-                }
 
-                // Return the frame
-                if (frameOpcode == OPCODE_TEXT) {
-                    out.add(new TextWebSocketFrame(frameFinalFlag, frameRsv, payloadBuffer));
-                    payloadBuffer = null;
+                    // MASK, PAYLOAD LEN 1
+                    b = in.readByte();
+                    boolean frameMasked = (b & 0x80) != 0;
+                    int framePayloadLen1 = b & 0x7F;
+
+                    if (frameRsv != 0 && !allowExtensions) {
+                        protocolViolation(ctx, "RSV != 0 and no extension negotiated, RSV:" + frameRsv);
+                        return;
+                    }
+
+                    if (maskedPayload && !frameMasked) {
+                        protocolViolation(ctx, "unmasked client to server frame");
+                        return;
+                    }
+                    if (frameOpcode > 7) { // control frame (have MSB in opcode set)
+
+                        // control frames MUST NOT be fragmented
+                        if (!frameFinalFlag) {
+                            protocolViolation(ctx, "fragmented control frame");
+                            return;
+                        }
+
+                        // control frames MUST have payload 125 octets or less
+                        if (framePayloadLen1 > 125) {
+                            protocolViolation(ctx, "control frame with payload length > 125 octets");
+                            return;
+                        }
+
+                        // check for reserved control frame opcodes
+                        if (!(frameOpcode == OPCODE_CLOSE || frameOpcode == OPCODE_PING
+                                || frameOpcode == OPCODE_PONG)) {
+                            protocolViolation(ctx, "control frame using reserved opcode " + frameOpcode);
+                            return;
+                        }
+
+                        // close frame : if there is a body, the first two bytes of the
+                        // body MUST be a 2-byte unsigned integer (in network byte
+                        // order) representing a getStatus code
+                        if (frameOpcode == 8 && framePayloadLen1 == 1) {
+                            protocolViolation(ctx, "received close control frame with payload len 1");
+                            return;
+                        }
+                    } else { // data frame
+                        // check for reserved data frame opcodes
+                        if (!(frameOpcode == OPCODE_CONT || frameOpcode == OPCODE_TEXT
+                                || frameOpcode == OPCODE_BINARY)) {
+                            protocolViolation(ctx, "data frame using reserved opcode " + frameOpcode);
+                            return;
+                        }
+
+                        // check opcode vs message fragmentation state 1/2
+                        if (fragmentedFramesCount == 0 && frameOpcode == OPCODE_CONT) {
+                            protocolViolation(ctx, "received continuation data frame outside fragmented message");
+                            return;
+                        }
+
+                        // check opcode vs message fragmentation state 2/2
+                        if (fragmentedFramesCount != 0 && frameOpcode != OPCODE_CONT && frameOpcode != OPCODE_PING) {
+                            protocolViolation(ctx,
+                                    "received non-continuation data frame while inside fragmented message");
+                            return;
+                        }
+                    }
+
+                    // Read frame payload length
+                    if (framePayloadLen1 == 126) {
+                        framePayloadLength = in.readUnsignedShort();
+                        if (framePayloadLength < 126) {
+                            protocolViolation(ctx, "invalid data frame length (not using minimal length encoding)");
+                            return;
+                        }
+                    } else if (framePayloadLen1 == 127) {
+                        framePayloadLength = in.readLong();
+                        // TODO: check if it's bigger than 0x7FFFFFFFFFFFFFFF, Maybe
+                        // just check if it's negative?
+
+                        if (framePayloadLength < 65536) {
+                            protocolViolation(ctx, "invalid data frame length (not using minimal length encoding)");
+                            return;
+                        }
+                    } else {
+                        framePayloadLength = framePayloadLen1;
+                    }
+
+                    if (framePayloadLength > maxFramePayloadLength) {
+                        protocolViolation(ctx, "Max frame length of " + maxFramePayloadLength + " has been exceeded.");
+                        return;
+                    }
+
+                    if (logger.isDebugEnabled()) {
+                        logger.debug("Decoding WebSocket Frame length={}", framePayloadLength);
+                    }
+
+                    checkpoint(State.MASKING_KEY);
+                case MASKING_KEY:
+                    if (maskedPayload) {
+                        if (maskingKey == null) {
+                            maskingKey = new byte[4];
+                        }
+                        in.readBytes(maskingKey);
+                    }
+                    checkpoint(State.PAYLOAD);
+                case PAYLOAD:
+                    // Sometimes, the payload may not be delivered in 1 nice packet
+                    // We need to accumulate the data until we have it all
+                    int rbytes = actualReadableBytes();
+
+                    long willHaveReadByteCount = framePayloadBytesRead + rbytes;
+                    // logger.debug("Frame rbytes=" + rbytes + " willHaveReadByteCount="
+                    // + willHaveReadByteCount + " framePayloadLength=" +
+                    // framePayloadLength);
+                    if (willHaveReadByteCount == framePayloadLength) {
+                        // We have all our content so proceed to process
+                        payloadBuffer = ctx.alloc().buffer(rbytes);
+                        payloadBuffer.writeBytes(in, rbytes);
+                    } else if (willHaveReadByteCount < framePayloadLength) {
+
+                        // We don't have all our content so accumulate payload.
+                        // Returning null means we will get called back
+                        if (framePayload == null) {
+                            framePayload = ctx.alloc().buffer(toFrameLength(framePayloadLength));
+                        }
+                        framePayload.writeBytes(in, rbytes);
+                        framePayloadBytesRead += rbytes;
+
+                        // Return null to wait for more bytes to arrive
+                        return;
+                    } else if (willHaveReadByteCount > framePayloadLength) {
+                        // We have more than what we need so read up to the end of frame
+                        // Leave the remainder in the buffer for next frame
+                        if (framePayload == null) {
+                            framePayload = ctx.alloc().buffer(toFrameLength(framePayloadLength));
+                        }
+                        framePayload.writeBytes(in, toFrameLength(framePayloadLength - framePayloadBytesRead));
+                    }
+
+                    // Now we have all the data, the next checkpoint must be the next
+                    // frame
+                    checkpoint(State.FRAME_START);
+
+                    // Take the data that we have in this packet
+                    if (framePayload == null) {
+                        framePayload = payloadBuffer;
+                        payloadBuffer = null;
+                    } else if (payloadBuffer != null) {
+                        framePayload.writeBytes(payloadBuffer);
+                        payloadBuffer.release();
+                        payloadBuffer = null;
+                    }
+
+                    // Unmask data if needed
+                    if (maskedPayload) {
+                        unmask(framePayload);
+                    }
+
+                    // Processing ping/pong/close frames because they cannot be
+                    // fragmented
+                    if (frameOpcode == OPCODE_PING) {
+                        out.add(new PingWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    }
+                    if (frameOpcode == OPCODE_PONG) {
+                        out.add(new PongWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    }
+                    if (frameOpcode == OPCODE_CLOSE) {
+                        receivedClosingHandshake = true;
+                        checkCloseFrameBody(ctx, framePayload);
+                        out.add(new CloseWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    }
+
+                    // Processing for possible fragmented messages for text and binary
+                    // frames
+                    if (frameFinalFlag) {
+                        // Final frame of the sequence. Apparently ping frames are
+                        // allowed in the middle of a fragmented message
+                        if (frameOpcode != OPCODE_PING) {
+                            fragmentedFramesCount = 0;
+
+                            // Check text for UTF8 correctness
+                            if (frameOpcode == OPCODE_TEXT ||
+                                    utf8Validator != null && utf8Validator.isChecking()) {
+                                // Check UTF-8 correctness for this payload
+                                checkUTF8String(ctx, framePayload);
+
+                                // This does a second check to make sure UTF-8
+                                // correctness for entire text message
+                                utf8Validator.finish();
+                            }
+                        }
+                    } else {
+                        // Not final frame so we can expect more frames in the
+                        // fragmented sequence
+                        if (fragmentedFramesCount == 0) {
+                            // First text or binary frame for a fragmented set
+                            if (frameOpcode == OPCODE_TEXT) {
+                                checkUTF8String(ctx, framePayload);
+                            }
+                        } else {
+                            // Subsequent frames - only check if init frame is text
+                            if (utf8Validator != null && utf8Validator.isChecking()) {
+                                checkUTF8String(ctx, framePayload);
+                            }
+                        }
+
+                        // Increment counter
+                        fragmentedFramesCount++;
+                    }
+
+                    // Return the frame
+                    if (frameOpcode == OPCODE_TEXT) {
+                        out.add(new TextWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    } else if (frameOpcode == OPCODE_BINARY) {
+                        out.add(new BinaryWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    } else if (frameOpcode == OPCODE_CONT) {
+                        out.add(new ContinuationWebSocketFrame(frameFinalFlag, frameRsv, framePayload));
+                        framePayload = null;
+                        return;
+                    } else {
+                        throw new UnsupportedOperationException("Cannot decode web socket frame with opcode: "
+                                + frameOpcode);
+                    }
+                case CORRUPT:
+                    // If we don't keep reading Netty will throw an exception saying
+                    // we can't return null if no bytes read and state not changed.
+                    in.readByte();
                     return;
-                } else if (frameOpcode == OPCODE_BINARY) {
-                    out.add(new BinaryWebSocketFrame(frameFinalFlag, frameRsv, payloadBuffer));
-                    payloadBuffer = null;
-                    return;
-                } else if (frameOpcode == OPCODE_CONT) {
-                    out.add(new ContinuationWebSocketFrame(frameFinalFlag, frameRsv,
-                                                           payloadBuffer));
-                    payloadBuffer = null;
-                    return;
-                } else {
-                    throw new UnsupportedOperationException("Cannot decode web socket frame with opcode: "
-                                                            + frameOpcode);
-                }
-            } finally {
-                if (payloadBuffer != null) {
+                default:
+                    throw new Error("Shouldn't reach here.");
+            }
+        } catch (Exception e) {
+            if (payloadBuffer != null) {
+                if (payloadBuffer.refCnt() > 0) {
                     payloadBuffer.release();
                 }
+                payloadBuffer = null;
             }
-        case CORRUPT:
-            if (in.isReadable()) {
-                // If we don't keep reading Netty will throw an exception saying
-                // we can't return null if no bytes read and state not changed.
-                in.readByte();
+            if (framePayload != null) {
+                if (framePayload.refCnt() > 0) {
+                    framePayload.release();
+                }
+                framePayload = null;
             }
-            return;
-        default:
-            throw new Error("Shouldn't reach here.");
+            throw e;
         }
     }
 
@@ -418,33 +430,18 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
         }
     }
 
-    private void protocolViolation(ChannelHandlerContext ctx, ByteBuf in, String reason) {
-        protocolViolation(ctx, in, WebSocketCloseStatus.PROTOCOL_ERROR, reason);
+    private void protocolViolation(ChannelHandlerContext ctx, String reason) {
+        protocolViolation(ctx, new CorruptedFrameException(reason));
     }
 
-    private void protocolViolation(ChannelHandlerContext ctx, ByteBuf in, WebSocketCloseStatus status, String reason) {
-        protocolViolation(ctx, in, new CorruptedWebSocketFrameException(status, reason));
-    }
-
-    private void protocolViolation(ChannelHandlerContext ctx, ByteBuf in, CorruptedWebSocketFrameException ex) {
-        state = State.CORRUPT;
-        int readableBytes = in.readableBytes();
-        if (readableBytes > 0) {
-            // Fix for memory leak, caused by ByteToMessageDecoder#channelRead:
-            // buffer 'cumulation' is released ONLY when no more readable bytes available.
-            in.skipBytes(readableBytes);
-        }
-        if (ctx.channel().isActive() && config.closeOnProtocolViolation()) {
+    private void protocolViolation(ChannelHandlerContext ctx, CorruptedFrameException ex) {
+        checkpoint(State.CORRUPT);
+        if (ctx.channel().isActive()) {
             Object closeMessage;
             if (receivedClosingHandshake) {
                 closeMessage = Unpooled.EMPTY_BUFFER;
             } else {
-                WebSocketCloseStatus closeStatus = ex.closeStatus();
-                String reasonText = ex.getMessage();
-                if (reasonText == null) {
-                    reasonText = closeStatus.reasonText();
-                }
-                closeMessage = new CloseWebSocketFrame(closeStatus, reasonText);
+                closeMessage = new CloseWebSocketFrame(1002, null);
             }
             ctx.writeAndFlush(closeMessage).addListener(ChannelFutureListener.CLOSE);
         }
@@ -459,6 +456,17 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
         }
     }
 
+    private void checkUTF8String(ChannelHandlerContext ctx, ByteBuf buffer) {
+        try {
+            if (utf8Validator == null) {
+                utf8Validator = new Utf8Validator();
+            }
+            utf8Validator.check(buffer);
+        } catch (CorruptedFrameException ex) {
+            protocolViolation(ctx, ex);
+        }
+    }
+
     /** */
     protected void checkCloseFrameBody(
             ChannelHandlerContext ctx, ByteBuf buffer) {
@@ -466,7 +474,7 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
             return;
         }
         if (buffer.readableBytes() == 1) {
-            protocolViolation(ctx, buffer, WebSocketCloseStatus.INVALID_PAYLOAD_DATA, "Invalid close frame body");
+            protocolViolation(ctx, "Invalid close frame body");
         }
 
         // Save reader index
@@ -475,20 +483,35 @@ public class WebSocket08FrameDecoder extends ByteToMessageDecoder
 
         // Must have 2 byte integer within the valid range
         int statusCode = buffer.readShort();
-        if (!WebSocketCloseStatus.isValidStatusCode(statusCode)) {
-            protocolViolation(ctx, buffer, "Invalid close frame getStatus code: " + statusCode);
+        if (statusCode >= 0 && statusCode <= 999 || statusCode >= 1004 && statusCode <= 1006
+                || statusCode >= 1012 && statusCode <= 2999) {
+            protocolViolation(ctx, "Invalid close frame getStatus code: " + statusCode);
         }
 
         // May have UTF-8 message
         if (buffer.isReadable()) {
             try {
                 new Utf8Validator().check(buffer);
-            } catch (CorruptedWebSocketFrameException ex) {
-                protocolViolation(ctx, buffer, ex);
+            } catch (CorruptedFrameException ex) {
+                protocolViolation(ctx, ex);
             }
         }
 
         // Restore reader index
         buffer.readerIndex(idx);
+    }
+
+    @Override
+    public void channelInactive(ChannelHandlerContext ctx) throws Exception {
+        super.channelInactive(ctx);
+
+        // release all not complete frames data to prevent leaks.
+        // https://github.com/netty/netty/issues/1874
+        if (framePayload != null) {
+            framePayload.release();
+        }
+        if (payloadBuffer != null) {
+            payloadBuffer.release();
+        }
     }
 }

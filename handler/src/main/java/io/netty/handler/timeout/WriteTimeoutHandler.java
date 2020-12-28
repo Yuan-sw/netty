@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,7 +24,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOutboundHandlerAdapter;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -94,7 +93,9 @@ public class WriteTimeoutHandler extends ChannelOutboundHandlerAdapter {
      *        the {@link TimeUnit} of {@code timeout}
      */
     public WriteTimeoutHandler(long timeout, TimeUnit unit) {
-        ObjectUtil.checkNotNull(unit, "unit");
+        if (unit == null) {
+            throw new NullPointerException("unit");
+        }
 
         if (timeout <= 0) {
             timeoutNanos = 0;
@@ -105,10 +106,7 @@ public class WriteTimeoutHandler extends ChannelOutboundHandlerAdapter {
 
     @Override
     public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
-        if (timeoutNanos > 0) {
-            promise = promise.unvoid();
-            scheduleTimeout(ctx, promise);
-        }
+        scheduleTimeout(ctx, promise);
         ctx.write(msg, promise);
     }
 
@@ -139,11 +137,13 @@ public class WriteTimeoutHandler extends ChannelOutboundHandlerAdapter {
     }
 
     private void addWriteTimeoutTask(WriteTimeoutTask task) {
-        if (lastTask != null) {
+        if (lastTask == null) {
+            lastTask = task;
+        } else {
             lastTask.next = task;
             task.prev = lastTask;
+            lastTask = task;
         }
-        lastTask = task;
     }
 
     private void removeWriteTimeoutTask(WriteTimeoutTask task) {

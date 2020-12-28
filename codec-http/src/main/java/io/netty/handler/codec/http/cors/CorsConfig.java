@@ -5,7 +5,7 @@
  * 2.0 (the "License"); you may not use this file except in compliance with the
  * License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,13 +16,16 @@
 package io.netty.handler.codec.http.cors;
 
 import io.netty.handler.codec.http.DefaultHttpHeaders;
-import io.netty.handler.codec.http.EmptyHttpHeaders;
 import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpHeaders.Names;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.util.internal.StringUtil;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -44,9 +47,9 @@ public final class CorsConfig {
     private final Set<String> allowedRequestHeaders;
     private final boolean allowNullOrigin;
     private final Map<CharSequence, Callable<?>> preflightHeaders;
-    private final boolean shortCircuit;
+    private final boolean shortCurcuit;
 
-    CorsConfig(final CorsConfigBuilder builder) {
+    private CorsConfig(final Builder builder) {
         origins = new LinkedHashSet<String>(builder.origins);
         anyOrigin = builder.anyOrigin;
         enabled = builder.enabled;
@@ -57,7 +60,7 @@ public final class CorsConfig {
         allowedRequestHeaders = builder.requestHeaders;
         allowNullOrigin = builder.allowNullOrigin;
         preflightHeaders = builder.preflightHeaders;
-        shortCircuit = builder.shortCircuit;
+        shortCurcuit = builder.shortCurcuit;
     }
 
     /**
@@ -199,7 +202,7 @@ public final class CorsConfig {
      */
     public HttpHeaders preflightResponseHeaders() {
         if (preflightHeaders.isEmpty()) {
-            return EmptyHttpHeaders.INSTANCE;
+            return HttpHeaders.EMPTY_HEADERS;
         }
         final HttpHeaders preflightHeaders = new DefaultHttpHeaders();
         for (Entry<CharSequence, Callable<?>> entry : this.preflightHeaders.entrySet()) {
@@ -219,20 +222,12 @@ public final class CorsConfig {
      *
      * CORS headers are set after a request is processed. This may not always be desired
      * and this setting will check that the Origin is valid and if it is not valid no
-     * further processing will take place, and an error will be returned to the calling client.
+     * further processing will take place, and a error will be returned to the calling client.
      *
      * @return {@code true} if a CORS request should short-circuit upon receiving an invalid Origin header.
      */
-    public boolean isShortCircuit() {
-        return shortCircuit;
-    }
-
-    /**
-     * @deprecated Use {@link #isShortCircuit()} instead.
-     */
-    @Deprecated
     public boolean isShortCurcuit() {
-        return isShortCircuit();
+        return shortCurcuit;
     }
 
     private static <T> T getValue(final Callable<T> callable) {
@@ -257,17 +252,19 @@ public final class CorsConfig {
     }
 
     /**
-     * @deprecated Use {@link CorsConfigBuilder#forAnyOrigin()} instead.
+     * Creates a Builder instance with it's origin set to '*'.
+     *
+     * @return Builder to support method chaining.
      */
-    @Deprecated
     public static Builder withAnyOrigin() {
         return new Builder();
     }
 
     /**
-     * @deprecated Use {@link CorsConfigBuilder#forOrigin(String)} instead.
+     * Creates a {@link Builder} instance with the specified origin.
+     *
+     * @return {@link Builder} to support method chaining.
      */
-    @Deprecated
     public static Builder withOrigin(final String origin) {
         if ("*".equals(origin)) {
             return new Builder();
@@ -276,158 +273,297 @@ public final class CorsConfig {
     }
 
     /**
-     * @deprecated Use {@link CorsConfigBuilder#forOrigins(String...)} instead.
+     * Creates a {@link Builder} instance with the specified origins.
+     *
+     * @return {@link Builder} to support method chaining.
      */
-    @Deprecated
     public static Builder withOrigins(final String... origins) {
         return new Builder(origins);
     }
 
     /**
-     * @deprecated Use {@link CorsConfigBuilder} instead.
+     * Builder used to configure and build a CorsConfig instance.
      */
-    @Deprecated
     public static class Builder {
 
-        private final CorsConfigBuilder builder;
+        private final Set<String> origins;
+        private final boolean anyOrigin;
+        private boolean allowNullOrigin;
+        private boolean enabled = true;
+        private boolean allowCredentials;
+        private final Set<String> exposeHeaders = new HashSet<String>();
+        private long maxAge;
+        private final Set<HttpMethod> requestMethods = new HashSet<HttpMethod>();
+        private final Set<String> requestHeaders = new HashSet<String>();
+        private final Map<CharSequence, Callable<?>> preflightHeaders = new HashMap<CharSequence, Callable<?>>();
+        private boolean noPreflightHeaders;
+        private boolean shortCurcuit;
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder} instead.
+         * Creates a new Builder instance with the origin passed in.
+         *
+         * @param origins the origin to be used for this builder.
          */
-        @Deprecated
         public Builder(final String... origins) {
-            builder = new CorsConfigBuilder(origins);
+            this.origins = new LinkedHashSet<String>(Arrays.asList(origins));
+            anyOrigin = false;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder} instead.
+         * Creates a new Builder instance allowing any origin, "*" which is the
+         * wildcard origin.
+         *
          */
-        @Deprecated
         public Builder() {
-            builder = new CorsConfigBuilder();
+            anyOrigin = true;
+            origins = Collections.emptySet();
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#allowNullOrigin()} instead.
+         * Web browsers may set the 'Origin' request header to 'null' if a resource is loaded
+         * from the local file system. Calling this method will enable a successful CORS response
+         * with a wildcard for the the CORS response header 'Access-Control-Allow-Origin'.
+         *
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder allowNullOrigin() {
-            builder.allowNullOrigin();
+            allowNullOrigin = true;
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#disable()} instead.
+         * Disables CORS support.
+         *
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder disable() {
-            builder.disable();
+            enabled = false;
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#exposeHeaders(String...)} instead.
+         * Specifies the headers to be exposed to calling clients.
+         *
+         * During a simple CORS request, only certain response headers are made available by the
+         * browser, for example using:
+         * <pre>
+         * xhr.getResponseHeader("Content-Type");
+         * </pre>
+         *
+         * The headers that are available by default are:
+         * <ul>
+         * <li>Cache-Control</li>
+         * <li>Content-Language</li>
+         * <li>Content-Type</li>
+         * <li>Expires</li>
+         * <li>Last-Modified</li>
+         * <li>Pragma</li>
+         * </ul>
+         *
+         * To expose other headers they need to be specified which is what this method enables by
+         * adding the headers to the CORS 'Access-Control-Expose-Headers' response header.
+         *
+         * @param headers the values to be added to the 'Access-Control-Expose-Headers' response header
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder exposeHeaders(final String... headers) {
-            builder.exposeHeaders(headers);
+            exposeHeaders.addAll(Arrays.asList(headers));
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#allowCredentials()} instead.
+         * By default cookies are not included in CORS requests, but this method will enable cookies to
+         * be added to CORS requests. Calling this method will set the CORS 'Access-Control-Allow-Credentials'
+         * response header to true.
+         *
+         * Please note, that cookie support needs to be enabled on the client side as well.
+         * The client needs to opt-in to send cookies by calling:
+         * <pre>
+         * xhr.withCredentials = true;
+         * </pre>
+         * The default value for 'withCredentials' is false in which case no cookies are sent.
+         * Settning this to true will included cookies in cross origin requests.
+         *
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder allowCredentials() {
-            builder.allowCredentials();
+            allowCredentials = true;
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#maxAge(long)} instead.
+         * When making a preflight request the client has to perform two request with can be inefficient.
+         * This setting will set the CORS 'Access-Control-Max-Age' response header and enables the
+         * caching of the preflight response for the specified time. During this time no preflight
+         * request will be made.
+         *
+         * @param max the maximum time, in seconds, that the preflight response may be cached.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder maxAge(final long max) {
-            builder.maxAge(max);
+            maxAge = max;
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#allowedRequestMethods(HttpMethod...)} instead.
+         * Specifies the allowed set of HTTP Request Methods that should be returned in the
+         * CORS 'Access-Control-Request-Method' response header.
+         *
+         * @param methods the {@link HttpMethod}s that should be allowed.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder allowedRequestMethods(final HttpMethod... methods) {
-            builder.allowedRequestMethods(methods);
+            requestMethods.addAll(Arrays.asList(methods));
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#allowedRequestHeaders(String...)} instead.
+         * Specifies the if headers that should be returned in the CORS 'Access-Control-Allow-Headers'
+         * response header.
+         *
+         * If a client specifies headers on the request, for example by calling:
+         * <pre>
+         * xhr.setRequestHeader('My-Custom-Header', "SomeValue");
+         * </pre>
+         * the server will recieve the above header name in the 'Access-Control-Request-Headers' of the
+         * preflight request. The server will then decide if it allows this header to be sent for the
+         * real request (remember that a preflight is not the real request but a request asking the server
+         * if it allow a request).
+         *
+         * @param headers the headers to be added to the preflight 'Access-Control-Allow-Headers' response header.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder allowedRequestHeaders(final String... headers) {
-            builder.allowedRequestHeaders(headers);
+            requestHeaders.addAll(Arrays.asList(headers));
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#preflightResponseHeader(CharSequence, Object...)} instead.
+         * Returns HTTP response headers that should be added to a CORS preflight response.
+         *
+         * An intermediary like a load balancer might require that a CORS preflight request
+         * have certain headers set. This enables such headers to be added.
+         *
+         * @param name the name of the HTTP header.
+         * @param values the values for the HTTP header.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder preflightResponseHeader(final CharSequence name, final Object... values) {
-            builder.preflightResponseHeader(name, values);
+            if (values.length == 1) {
+                preflightHeaders.put(name, new ConstantValueGenerator(values[0]));
+            } else {
+                preflightResponseHeader(name, Arrays.asList(values));
+            }
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#preflightResponseHeader(CharSequence, Iterable)} instead.
+         * Returns HTTP response headers that should be added to a CORS preflight response.
+         *
+         * An intermediary like a load balancer might require that a CORS preflight request
+         * have certain headers set. This enables such headers to be added.
+         *
+         * @param name the name of the HTTP header.
+         * @param value the values for the HTTP header.
+         * @param <T> the type of values that the Iterable contains.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public <T> Builder preflightResponseHeader(final CharSequence name, final Iterable<T> value) {
-            builder.preflightResponseHeader(name, value);
+            preflightHeaders.put(name, new ConstantValueGenerator(value));
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#preflightResponseHeader(CharSequence, Callable)} instead.
+         * Returns HTTP response headers that should be added to a CORS preflight response.
+         *
+         * An intermediary like a load balancer might require that a CORS preflight request
+         * have certain headers set. This enables such headers to be added.
+         *
+         * Some values must be dynamically created when the HTTP response is created, for
+         * example the 'Date' response header. This can be occomplished by using a Callable
+         * which will have its 'call' method invoked when the HTTP response is created.
+         *
+         * @param name the name of the HTTP header.
+         * @param valueGenerator a Callable which will be invoked at HTTP response creation.
+         * @param <T> the type of the value that the Callable can return.
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public <T> Builder preflightResponseHeader(final String name, final Callable<T> valueGenerator) {
-            builder.preflightResponseHeader(name, valueGenerator);
+            preflightHeaders.put(name, valueGenerator);
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#noPreflightResponseHeaders()} instead.
+         * Specifies that no preflight response headers should be added to a preflight response.
+         *
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder noPreflightResponseHeaders() {
-            builder.noPreflightResponseHeaders();
+            noPreflightHeaders = true;
             return this;
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#build()} instead.
+         * Builds a {@link CorsConfig} with settings specified by previous method calls.
+         *
+         * @return {@link CorsConfig} the configured CorsConfig instance.
          */
-        @Deprecated
         public CorsConfig build() {
-            return builder.build();
+            if (preflightHeaders.isEmpty() && !noPreflightHeaders) {
+                preflightHeaders.put(Names.DATE, new DateValueGenerator());
+                preflightHeaders.put(Names.CONTENT_LENGTH, new ConstantValueGenerator("0"));
+            }
+            return new CorsConfig(this);
         }
 
         /**
-         * @deprecated Use {@link CorsConfigBuilder#shortCircuit()} instead.
+         * Specifies that a CORS request should be rejected if it's invalid before being
+         * further processing.
+         *
+         * CORS headers are set after a request is processed. This may not always be desired
+         * and this setting will check that the Origin is valid and if it is not valid no
+         * further processing will take place, and a error will be returned to the calling client.
+         *
+         * @return {@link Builder} to support method chaining.
          */
-        @Deprecated
         public Builder shortCurcuit() {
-            builder.shortCircuit();
+            shortCurcuit = true;
             return this;
         }
     }
 
     /**
-     * @deprecated Removed without alternatives.
+     * This class is used for preflight HTTP response values that do not need to be
+     * generated, but instead the value is "static" in that the same value will be returned
+     * for each call.
      */
-    @Deprecated
+    private static final class ConstantValueGenerator implements Callable<Object> {
+
+        private final Object value;
+
+        /**
+         * Sole constructor.
+         *
+         * @param value the value that will be returned when the call method is invoked.
+         */
+        private ConstantValueGenerator(final Object value) {
+            if (value == null) {
+                throw new IllegalArgumentException("value must not be null");
+            }
+            this.value = value;
+        }
+
+        @Override
+        public Object call() {
+            return value;
+        }
+    }
+
+    /**
+     * This callable is used for the DATE preflight HTTP response HTTP header.
+     * It's value must be generated when the response is generated, hence will be
+     * different for every call.
+     */
     public static final class DateValueGenerator implements Callable<Date> {
 
         @Override
@@ -435,4 +571,5 @@ public final class CorsConfig {
             return new Date();
         }
     }
+
 }

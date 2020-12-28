@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -27,7 +27,7 @@ package io.netty.handler.codec.http;
  * separately via {@link io.netty.handler.codec.http.cookie.ServerCookieDecoder},
  * {@link io.netty.handler.codec.http.cookie.ClientCookieDecoder},
  * {@link io.netty.handler.codec.http.cookie.ServerCookieEncoder},
- * and {@link io.netty.handler.codec.http.cookie.ClientCookieEncoder}.
+ * and {@link @io.netty.handler.codec.http.cookie.ClientCookieEncoder}.
  *
  * @see HttpResponse
  * @see io.netty.handler.codec.http.cookie.ServerCookieDecoder
@@ -38,17 +38,11 @@ package io.netty.handler.codec.http;
 public interface HttpRequest extends HttpMessage {
 
     /**
-     * @deprecated Use {@link #method()} instead.
-     */
-    @Deprecated
-    HttpMethod getMethod();
-
-    /**
      * Returns the {@link HttpMethod} of this {@link HttpRequest}.
      *
      * @return The {@link HttpMethod} of this {@link HttpRequest}
      */
-    HttpMethod method();
+    HttpMethod getMethod();
 
     /**
      * Set the {@link HttpMethod} of this {@link HttpRequest}.
@@ -56,17 +50,11 @@ public interface HttpRequest extends HttpMessage {
     HttpRequest setMethod(HttpMethod method);
 
     /**
-     * @deprecated Use {@link #uri()} instead.
-     */
-    @Deprecated
-    String getUri();
-
-    /**
      * Returns the requested URI (or alternatively, path)
      *
      * @return The URI being requested
      */
-    String uri();
+    String getUri();
 
     /**
      *  Set the requested URI (or alternatively, path)

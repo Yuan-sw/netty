@@ -5,7 +5,7 @@
  * "License"); you may not use this file except in compliance with the License. You may obtain a
  * copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software distributed under the License
  * is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express
@@ -13,8 +13,6 @@
  * the License.
  */
 package io.netty.util.internal;
-
-import java.util.Collection;
 
 /**
  * A grab-bag of useful utility methods.
@@ -50,11 +48,11 @@ public final class ObjectUtil {
      * Checks that the given argument is strictly positive. If it is not, throws {@link IllegalArgumentException}.
      * Otherwise, returns the argument.
      */
-    public static long checkPositive(long l, String name) {
-        if (l <= 0) {
-            throw new IllegalArgumentException(name + ": " + l + " (expected: > 0)");
+    public static long checkPositive(long i, String name) {
+        if (i <= 0) {
+            throw new IllegalArgumentException(name + ": " + i + " (expected: > 0)");
         }
-        return l;
+        return i;
     }
 
     /**
@@ -72,33 +70,11 @@ public final class ObjectUtil {
      * Checks that the given argument is positive or zero. If it is not, throws {@link IllegalArgumentException}.
      * Otherwise, returns the argument.
      */
-    public static long checkPositiveOrZero(long l, String name) {
-        if (l < 0) {
-            throw new IllegalArgumentException(name + ": " + l + " (expected: >= 0)");
-        }
-        return l;
-    }
-
-    /**
-     * Checks that the given argument is in range. If it is not, throws {@link IllegalArgumentException}.
-     * Otherwise, returns the argument.
-     */
-    public static int checkInRange(int i, int start, int end, String name) {
-        if (i < start || i > end) {
-            throw new IllegalArgumentException(name + ": " + i + " (expected: " + start + "-" + end + ")");
+    public static long checkPositiveOrZero(long i, String name) {
+        if (i < 0) {
+            throw new IllegalArgumentException(name + ": " + i + " (expected: >= 0)");
         }
         return i;
-    }
-
-    /**
-     * Checks that the given argument is in range. If it is not, throws {@link IllegalArgumentException}.
-     * Otherwise, returns the argument.
-     */
-    public static long checkInRange(long l, long start, long end, String name) {
-        if (l < start || l > end) {
-            throw new IllegalArgumentException(name + ": " + l + " (expected: " + start + "-" + end + ")");
-        }
-        return l;
     }
 
     /**
@@ -110,17 +86,6 @@ public final class ObjectUtil {
         checkNotNull(array, name);
         checkPositive(array.length, name + ".length");
         return array;
-    }
-
-    /**
-     * Checks that the given argument is neither null nor empty.
-     * If it is, throws {@link NullPointerException} or {@link IllegalArgumentException}.
-     * Otherwise, returns the argument.
-     */
-    public static <T extends Collection<?>> T checkNonEmpty(T collection, String name) {
-        checkNotNull(collection, name);
-        checkPositive(collection.size(), name + ".size");
-        return collection;
     }
 
     /**

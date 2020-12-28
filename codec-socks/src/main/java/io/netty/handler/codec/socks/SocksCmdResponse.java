@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,7 +18,6 @@ package io.netty.handler.codec.socks;
 import io.netty.buffer.ByteBuf;
 import io.netty.util.CharsetUtil;
 import io.netty.util.NetUtil;
-import io.netty.util.internal.ObjectUtil;
 
 import java.net.IDN;
 
@@ -62,8 +61,12 @@ public final class SocksCmdResponse extends SocksResponse {
      */
     public SocksCmdResponse(SocksCmdStatus cmdStatus, SocksAddressType addressType, String host, int port) {
         super(SocksResponseType.CMD);
-        ObjectUtil.checkNotNull(cmdStatus, "cmdStatus");
-        ObjectUtil.checkNotNull(addressType, "addressType");
+        if (cmdStatus == null) {
+            throw new NullPointerException("cmdStatus");
+        }
+        if (addressType == null) {
+            throw new NullPointerException("addressType");
+        }
         if (host != null) {
             switch (addressType) {
                 case IPv4:
@@ -72,11 +75,10 @@ public final class SocksCmdResponse extends SocksResponse {
                     }
                     break;
                 case DOMAIN:
-                    String asciiHost = IDN.toASCII(host);
-                    if (asciiHost.length() > 255) {
-                        throw new IllegalArgumentException(host + " IDN: " + asciiHost + " exceeds 255 char limit");
+                    if (IDN.toASCII(host).length() > 255) {
+                        throw new IllegalArgumentException(host + " IDN: " +
+                                IDN.toASCII(host) + " exceeds 255 char limit");
                     }
-                    host = asciiHost;
                     break;
                 case IPv6:
                     if (!NetUtil.isValidIpV6Address(host)) {
@@ -86,6 +88,7 @@ public final class SocksCmdResponse extends SocksResponse {
                 case UNKNOWN:
                     break;
             }
+            host = IDN.toASCII(host);
         }
         if (port < 0 || port > 65535) {
             throw new IllegalArgumentException(port + " is not in bounds 0 <= x <= 65535");
@@ -115,22 +118,26 @@ public final class SocksCmdResponse extends SocksResponse {
     }
 
     /**
-     * Returns host that is used as a parameter in {@link SocksCmdType}.
+     * Returns host that is used as a parameter in {@link io.netty.handler.codec.socks.SocksCmdType}.
      * Host (BND.ADDR field in response) is address that server used when connecting to the target host.
      * This is typically different from address which client uses to connect to the SOCKS server.
      *
-     * @return host that is used as a parameter in {@link SocksCmdType}
+     * @return host that is used as a parameter in {@link io.netty.handler.codec.socks.SocksCmdType}
      *         or null when there was no host specified during response construction
      */
     public String host() {
-        return host != null && addressType == SocksAddressType.DOMAIN ? IDN.toUnicode(host) : host;
+        if (host != null) {
+            return IDN.toUnicode(host);
+        } else {
+            return null;
+        }
     }
 
     /**
-     * Returns port that is used as a parameter in {@link SocksCmdType}.
+     * Returns port that is used as a parameter in {@link io.netty.handler.codec.socks.SocksCmdType}.
      * Port (BND.PORT field in response) is port that the server assigned to connect to the target host.
      *
-     * @return port that is used as a parameter in {@link SocksCmdType}
+     * @return port that is used as a parameter in {@link io.netty.handler.codec.socks.SocksCmdType}
      */
     public int port() {
         return port;
@@ -151,14 +158,11 @@ public final class SocksCmdResponse extends SocksResponse {
                 break;
             }
             case DOMAIN: {
-                if (host != null) {
-                    byteBuf.writeByte(host.length());
-                    byteBuf.writeCharSequence(host, CharsetUtil.US_ASCII);
-                } else {
-                    byteBuf.writeByte(DOMAIN_ZEROED.length);
-                    byteBuf.writeBytes(DOMAIN_ZEROED);
-                }
-                byteBuf.writeShort(port);
+                byte[] hostContent = host == null ?
+                        DOMAIN_ZEROED : host.getBytes(CharsetUtil.US_ASCII);
+                byteBuf.writeByte(hostContent.length);   // domain length
+                byteBuf.writeBytes(hostContent);   // domain value
+                byteBuf.writeShort(port);  // port value
                 break;
             }
             case IPv6: {

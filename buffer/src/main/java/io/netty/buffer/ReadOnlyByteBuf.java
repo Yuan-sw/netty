@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,15 +15,12 @@
  */
 package io.netty.buffer;
 
-import io.netty.util.ByteProcessor;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ReadOnlyBufferException;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 
@@ -48,11 +45,6 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
             this.buffer = buffer;
         }
         setIndex(buffer.readerIndex(), buffer.writerIndex());
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return true;
     }
 
     @Override
@@ -162,32 +154,12 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public ByteBuf setShortLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    protected void _setShortLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public ByteBuf setMedium(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
     @Override
     protected void _setMedium(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    protected void _setMediumLE(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
@@ -202,32 +174,12 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public ByteBuf setIntLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    protected void _setIntLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public ByteBuf setLong(int index, long value) {
         throw new ReadOnlyBufferException();
     }
 
     @Override
     protected void _setLong(int index, long value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    protected void _setLongLE(int index, long value) {
         throw new ReadOnlyBufferException();
     }
 
@@ -242,20 +194,9 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public int setBytes(int index, FileChannel in, long position, int length) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public int getBytes(int index, GatheringByteChannel out, int length)
             throws IOException {
         return unwrap().getBytes(index, out, length);
-    }
-
-    @Override
-    public int getBytes(int index, FileChannel out, long position, int length)
-            throws IOException {
-        return unwrap().getBytes(index, out, position, length);
     }
 
     @Override
@@ -319,16 +260,6 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public short getShortLE(int index) {
-        return unwrap().getShortLE(index);
-    }
-
-    @Override
-    protected short _getShortLE(int index) {
-        return unwrap().getShortLE(index);
-    }
-
-    @Override
     public int getUnsignedMedium(int index) {
         return unwrap().getUnsignedMedium(index);
     }
@@ -336,16 +267,6 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     @Override
     protected int _getUnsignedMedium(int index) {
         return unwrap().getUnsignedMedium(index);
-    }
-
-    @Override
-    public int getUnsignedMediumLE(int index) {
-        return unwrap().getUnsignedMediumLE(index);
-    }
-
-    @Override
-    protected int _getUnsignedMediumLE(int index) {
-        return unwrap().getUnsignedMediumLE(index);
     }
 
     @Override
@@ -359,16 +280,6 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public int getIntLE(int index) {
-        return unwrap().getIntLE(index);
-    }
-
-    @Override
-    protected int _getIntLE(int index) {
-        return unwrap().getIntLE(index);
-    }
-
-    @Override
     public long getLong(int index) {
         return unwrap().getLong(index);
     }
@@ -376,16 +287,6 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     @Override
     protected long _getLong(int index) {
         return unwrap().getLong(index);
-    }
-
-    @Override
-    public long getLongLE(int index) {
-        return unwrap().getLongLE(index);
-    }
-
-    @Override
-    protected long _getLongLE(int index) {
-        return unwrap().getLongLE(index);
     }
 
     @Override
@@ -404,12 +305,12 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         return unwrap().forEachByte(index, length, processor);
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         return unwrap().forEachByteDesc(index, length, processor);
     }
 
@@ -421,10 +322,5 @@ public class ReadOnlyByteBuf extends AbstractDerivedByteBuf {
     @Override
     public ByteBuf capacity(int newCapacity) {
         throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public ByteBuf asReadOnly() {
-        return this;
     }
 }

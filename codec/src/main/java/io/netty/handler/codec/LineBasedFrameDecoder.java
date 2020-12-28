@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,8 +16,8 @@
 package io.netty.handler.codec;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufProcessor;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.util.ByteProcessor;
 
 import java.util.List;
 
@@ -25,12 +25,6 @@ import java.util.List;
  * A decoder that splits the received {@link ByteBuf}s on line endings.
  * <p>
  * Both {@code "\n"} and {@code "\r\n"} are handled.
- * <p>
- * The byte stream is expected to be in UTF-8 character encoding or ASCII. The current implementation
- * uses direct {@code byte} to {@code char} cast and then compares that {@code char} to a few low range
- * ASCII characters like {@code '\n'} or {@code '\r'}. UTF-8 is not using low range [0..0x7F]
- * byte values for multibyte codepoint representations therefore fully supported by this implementation.
- * <p>
  * For a more general delimiter-based decoder, see {@link DelimiterBasedFrameDecoder}.
  */
 public class LineBasedFrameDecoder extends ByteToMessageDecoder {
@@ -110,13 +104,13 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
                 }
 
                 if (stripDelimiter) {
-                    frame = buffer.readRetainedSlice(length);
+                    frame = buffer.readSlice(length);
                     buffer.skipBytes(delimLength);
                 } else {
-                    frame = buffer.readRetainedSlice(length + delimLength);
+                    frame = buffer.readSlice(length + delimLength);
                 }
 
-                return frame;
+                return frame.retain();
             } else {
                 final int length = buffer.readableBytes();
                 if (length > maxLength) {
@@ -143,8 +137,6 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
             } else {
                 discardedBytes += buffer.readableBytes();
                 buffer.readerIndex(buffer.writerIndex());
-                // We skip everything in the buffer, we need to set the offset to 0 again.
-                offset = 0;
             }
             return null;
         }
@@ -166,7 +158,7 @@ public class LineBasedFrameDecoder extends ByteToMessageDecoder {
      */
     private int findEndOfLine(final ByteBuf buffer) {
         int totalLength = buffer.readableBytes();
-        int i = buffer.forEachByte(buffer.readerIndex() + offset, totalLength - offset, ByteProcessor.FIND_LF);
+        int i = buffer.forEachByte(buffer.readerIndex() + offset, totalLength - offset, ByteBufProcessor.FIND_LF);
         if (i >= 0) {
             offset = 0;
             if (i > 0 && buffer.getByte(i - 1) == '\r') {

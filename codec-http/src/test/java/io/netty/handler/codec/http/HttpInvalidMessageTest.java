@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,11 +24,7 @@ import org.junit.Test;
 
 import java.util.Random;
 
-import static io.netty.handler.codec.http.HttpHeadersTestUtils.of;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 public class HttpInvalidMessageTest {
 
@@ -38,8 +34,8 @@ public class HttpInvalidMessageTest {
     public void testRequestWithBadInitialLine() throws Exception {
         EmbeddedChannel ch = new EmbeddedChannel(new HttpRequestDecoder());
         ch.writeInbound(Unpooled.copiedBuffer("GET / HTTP/1.0 with extra\r\n", CharsetUtil.UTF_8));
-        HttpRequest req = ch.readInbound();
-        DecoderResult dr = req.decoderResult();
+        HttpRequest req = (HttpRequest) ch.readInbound();
+        DecoderResult dr = req.getDecoderResult();
         assertFalse(dr.isSuccess());
         assertTrue(dr.isFailure());
         ensureInboundTrafficDiscarded(ch);
@@ -52,12 +48,12 @@ public class HttpInvalidMessageTest {
         ch.writeInbound(Unpooled.copiedBuffer("Good_Name: Good Value\r\n", CharsetUtil.UTF_8));
         ch.writeInbound(Unpooled.copiedBuffer("Bad=Name: Bad Value\r\n", CharsetUtil.UTF_8));
         ch.writeInbound(Unpooled.copiedBuffer("\r\n", CharsetUtil.UTF_8));
-        HttpRequest req = ch.readInbound();
-        DecoderResult dr = req.decoderResult();
+        HttpRequest req = (HttpRequest) ch.readInbound();
+        DecoderResult dr = req.getDecoderResult();
         assertFalse(dr.isSuccess());
         assertTrue(dr.isFailure());
-        assertEquals("Good Value", req.headers().get(of("Good_Name")));
-        assertEquals("/maybe-something", req.uri());
+        assertEquals("Good Value", req.headers().get("Good_Name"));
+        assertEquals("/maybe-something", req.getUri());
         ensureInboundTrafficDiscarded(ch);
     }
 
@@ -65,8 +61,8 @@ public class HttpInvalidMessageTest {
     public void testResponseWithBadInitialLine() throws Exception {
         EmbeddedChannel ch = new EmbeddedChannel(new HttpResponseDecoder());
         ch.writeInbound(Unpooled.copiedBuffer("HTTP/1.0 BAD_CODE Bad Server\r\n", CharsetUtil.UTF_8));
-        HttpResponse res = ch.readInbound();
-        DecoderResult dr = res.decoderResult();
+        HttpResponse res = (HttpResponse) ch.readInbound();
+        DecoderResult dr = res.getDecoderResult();
         assertFalse(dr.isSuccess());
         assertTrue(dr.isFailure());
         ensureInboundTrafficDiscarded(ch);
@@ -79,12 +75,12 @@ public class HttpInvalidMessageTest {
         ch.writeInbound(Unpooled.copiedBuffer("Good_Name: Good Value\r\n", CharsetUtil.UTF_8));
         ch.writeInbound(Unpooled.copiedBuffer("Bad=Name: Bad Value\r\n", CharsetUtil.UTF_8));
         ch.writeInbound(Unpooled.copiedBuffer("\r\n", CharsetUtil.UTF_8));
-        HttpResponse res = ch.readInbound();
-        DecoderResult dr = res.decoderResult();
+        HttpResponse res = (HttpResponse) ch.readInbound();
+        DecoderResult dr = res.getDecoderResult();
         assertFalse(dr.isSuccess());
         assertTrue(dr.isFailure());
-        assertEquals("Maybe OK", res.status().reasonPhrase());
-        assertEquals("Good Value", res.headers().get(of("Good_Name")));
+        assertEquals("Maybe OK", res.getStatus().reasonPhrase());
+        assertEquals("Good Value", res.headers().get("Good_Name"));
         ensureInboundTrafficDiscarded(ch);
     }
 
@@ -95,11 +91,11 @@ public class HttpInvalidMessageTest {
         ch.writeInbound(Unpooled.copiedBuffer("Transfer-Encoding: chunked\r\n\r\n", CharsetUtil.UTF_8));
         ch.writeInbound(Unpooled.copiedBuffer("BAD_LENGTH\r\n", CharsetUtil.UTF_8));
 
-        HttpRequest req = ch.readInbound();
-        assertTrue(req.decoderResult().isSuccess());
+        HttpRequest req = (HttpRequest) ch.readInbound();
+        assertTrue(req.getDecoderResult().isSuccess());
 
-        LastHttpContent chunk = ch.readInbound();
-        DecoderResult dr = chunk.decoderResult();
+        LastHttpContent chunk = (LastHttpContent) ch.readInbound();
+        DecoderResult dr = chunk.getDecoderResult();
         assertFalse(dr.isSuccess());
         assertTrue(dr.isFailure());
         ensureInboundTrafficDiscarded(ch);

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,7 @@ import io.netty.buffer.DefaultByteBufHolder;
 import io.netty.util.internal.StringUtil;
 
 /**
- * Base class for web socket frames.
+ * Base class for web socket frames
  */
 public abstract class WebSocketFrame extends DefaultByteBufHolder {
 
@@ -61,22 +61,10 @@ public abstract class WebSocketFrame extends DefaultByteBufHolder {
     }
 
     @Override
-    public WebSocketFrame copy() {
-        return (WebSocketFrame) super.copy();
-    }
+    public abstract WebSocketFrame copy();
 
     @Override
-    public WebSocketFrame duplicate() {
-        return (WebSocketFrame) super.duplicate();
-    }
-
-    @Override
-    public WebSocketFrame retainedDuplicate() {
-        return (WebSocketFrame) super.retainedDuplicate();
-    }
-
-    @Override
-    public abstract WebSocketFrame replace(ByteBuf content);
+    public abstract WebSocketFrame duplicate();
 
     @Override
     public String toString() {
@@ -92,18 +80,6 @@ public abstract class WebSocketFrame extends DefaultByteBufHolder {
     @Override
     public WebSocketFrame retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public WebSocketFrame touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public WebSocketFrame touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

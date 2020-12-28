@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,7 +24,6 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ReadOnlyBufferException;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.util.Collections;
@@ -39,7 +38,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     private final int capacity;
     private final ByteBufAllocator allocator;
     private final ByteOrder order;
-    private final ByteBuf[] buffers;
+    private final Object[] buffers;
     private final boolean direct;
 
     FixedCompositeByteBuf(ByteBufAllocator allocator, ByteBuf... buffers) {
@@ -49,10 +48,11 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             order = ByteOrder.BIG_ENDIAN;
             nioBufferCount = 1;
             capacity = 0;
-            direct = Unpooled.EMPTY_BUFFER.isDirect();
+            direct = false;
         } else {
             ByteBuf b = buffers[0];
-            this.buffers = buffers;
+            this.buffers = new Object[buffers.length];
+            this.buffers[0] = b;
             boolean direct = true;
             int nioBufferCount = b.nioBufferCount();
             int capacity = b.readableBytes();
@@ -67,6 +67,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
                 if (!b.isDirect()) {
                     direct = false;
                 }
+                this.buffers[i] = b;
             }
             this.nioBufferCount = nioBufferCount;
             this.capacity = capacity;
@@ -127,22 +128,12 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
-    protected void _setShortLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public ByteBuf setMedium(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
     @Override
     protected void _setMedium(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    protected void _setMediumLE(int index, int value) {
         throw new ReadOnlyBufferException();
     }
 
@@ -157,11 +148,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
-    protected void _setIntLE(int index, int value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public ByteBuf setLong(int index, long value) {
         throw new ReadOnlyBufferException();
     }
@@ -172,22 +158,12 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
-    protected void _setLongLE(int index, long value) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
     public int setBytes(int index, InputStream in, int length) {
         throw new ReadOnlyBufferException();
     }
 
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) {
-        throw new ReadOnlyBufferException();
-    }
-
-    @Override
-    public int setBytes(int index, FileChannel in, long position, int length) {
         throw new ReadOnlyBufferException();
     }
 
@@ -230,14 +206,20 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
         int readable = 0;
         for (int i = 0 ; i < buffers.length; i++) {
             Component comp = null;
-            ByteBuf b = buffers[i];
-            if (b instanceof Component) {
-                comp = (Component) b;
+            ByteBuf b;
+            Object obj = buffers[i];
+            boolean isBuffer;
+            if (obj instanceof ByteBuf) {
+                b = (ByteBuf) obj;
+                isBuffer = true;
+            } else {
+                comp = (Component) obj;
                 b = comp.buf;
+                isBuffer = false;
             }
             readable += b.readableBytes();
             if (index < readable) {
-                if (comp == null) {
+                if (isBuffer) {
                     // Create a new component and store it in the array so it not create a new object
                     // on the next access.
                     comp = new Component(i, readable - b.readableBytes(), b);
@@ -253,8 +235,11 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
      * Return the {@link ByteBuf} stored at the given index of the array.
      */
     private ByteBuf buffer(int i) {
-        ByteBuf b = buffers[i];
-        return b instanceof Component ? ((Component) b).buf : b;
+        Object obj = buffers[i];
+        if (obj instanceof ByteBuf) {
+            return (ByteBuf) obj;
+        }
+        return ((Component) obj).buf;
     }
 
     @Override
@@ -281,18 +266,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
-    protected short _getShortLE(int index) {
-        Component c = findComponent(index);
-        if (index + 2 <= c.endOffset) {
-            return c.buf.getShortLE(index - c.offset);
-        } else if (order() == ByteOrder.BIG_ENDIAN) {
-            return (short) (_getByte(index) & 0xff | (_getByte(index + 1) & 0xff) << 8);
-        } else {
-            return (short) ((_getByte(index) & 0xff) << 8 | _getByte(index + 1) & 0xff);
-        }
-    }
-
-    @Override
     protected int _getUnsignedMedium(int index) {
         Component c = findComponent(index);
         if (index + 3 <= c.endOffset) {
@@ -301,18 +274,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             return (_getShort(index) & 0xffff) << 8 | _getByte(index + 2) & 0xff;
         } else {
             return _getShort(index) & 0xFFFF | (_getByte(index + 2) & 0xFF) << 16;
-        }
-    }
-
-    @Override
-    protected int _getUnsignedMediumLE(int index) {
-        Component c = findComponent(index);
-        if (index + 3 <= c.endOffset) {
-            return c.buf.getUnsignedMediumLE(index - c.offset);
-        } else if (order() == ByteOrder.BIG_ENDIAN) {
-            return _getShortLE(index) & 0xffff | (_getByte(index + 2) & 0xff) << 16;
-        } else {
-            return (_getShortLE(index) & 0xffff) << 8 | _getByte(index + 2) & 0xff;
         }
     }
 
@@ -329,18 +290,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
     }
 
     @Override
-    protected int _getIntLE(int index) {
-        Component c = findComponent(index);
-        if (index + 4 <= c.endOffset) {
-            return c.buf.getIntLE(index - c.offset);
-        } else if (order() == ByteOrder.BIG_ENDIAN) {
-            return _getShortLE(index) & 0xFFFF | (_getShortLE(index + 2) & 0xFFFF) << 16;
-        } else {
-            return (_getShortLE(index) & 0xffff) << 16 | _getShortLE(index + 2) & 0xffff;
-        }
-    }
-
-    @Override
     protected long _getLong(int index) {
         Component c = findComponent(index);
         if (index + 8 <= c.endOffset) {
@@ -349,18 +298,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             return (_getInt(index) & 0xffffffffL) << 32 | _getInt(index + 4) & 0xffffffffL;
         } else {
             return _getInt(index) & 0xFFFFFFFFL | (_getInt(index + 4) & 0xFFFFFFFFL) << 32;
-        }
-    }
-
-    @Override
-    protected long _getLongLE(int index) {
-        Component c = findComponent(index);
-        if (index + 8 <= c.endOffset) {
-            return c.buf.getLongLE(index - c.offset);
-        } else if (order() == ByteOrder.BIG_ENDIAN) {
-            return _getIntLE(index) & 0xffffffffL | (_getIntLE(index + 4) & 0xffffffffL) << 32;
-        } else {
-            return (_getIntLE(index) & 0xffffffffL) << 32 | _getIntLE(index + 4) & 0xffffffffL;
         }
     }
 
@@ -457,25 +394,6 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
             return out.write(internalNioBuffer(index, length));
         } else {
             long writtenBytes = out.write(nioBuffers(index, length));
-            if (writtenBytes > Integer.MAX_VALUE) {
-                return Integer.MAX_VALUE;
-            } else {
-                return (int) writtenBytes;
-            }
-        }
-    }
-
-    @Override
-    public int getBytes(int index, FileChannel out, long position, int length)
-            throws IOException {
-        int count = nioBufferCount();
-        if (count == 1) {
-            return out.write(internalNioBuffer(index, length), position);
-        } else {
-            long writtenBytes = 0;
-            for (ByteBuffer buf : nioBuffers(index, length)) {
-                writtenBytes += out.write(buf, position + writtenBytes);
-            }
             if (writtenBytes > Integer.MAX_VALUE) {
                 return Integer.MAX_VALUE;
             } else {
@@ -593,7 +511,7 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
                 s = buffer(++i);
             }
 
-            return array.toArray(new ByteBuffer[0]);
+            return array.toArray(new ByteBuffer[array.size()]);
         } finally {
             array.recycle();
         }
@@ -601,62 +519,27 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
 
     @Override
     public boolean hasArray() {
-        switch (buffers.length) {
-            case 0:
-                return true;
-            case 1:
-                return buffer(0).hasArray();
-            default:
-                return false;
-        }
+        return false;
     }
 
     @Override
     public byte[] array() {
-        switch (buffers.length) {
-            case 0:
-                return EmptyArrays.EMPTY_BYTES;
-            case 1:
-                return buffer(0).array();
-            default:
-                throw new UnsupportedOperationException();
-        }
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public int arrayOffset() {
-        switch (buffers.length) {
-            case 0:
-                return 0;
-            case 1:
-                return buffer(0).arrayOffset();
-            default:
-                throw new UnsupportedOperationException();
-        }
+        throw new UnsupportedOperationException();
     }
 
     @Override
     public boolean hasMemoryAddress() {
-        switch (buffers.length) {
-            case 0:
-                return Unpooled.EMPTY_BUFFER.hasMemoryAddress();
-            case 1:
-                return buffer(0).hasMemoryAddress();
-            default:
-                return false;
-        }
+        return false;
     }
 
     @Override
     public long memoryAddress() {
-        switch (buffers.length) {
-            case 0:
-                return Unpooled.EMPTY_BUFFER.memoryAddress();
-            case 1:
-                return buffer(0).memoryAddress();
-            default:
-                throw new UnsupportedOperationException();
-        }
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -673,16 +556,17 @@ final class FixedCompositeByteBuf extends AbstractReferenceCountedByteBuf {
         return result + ", components=" + buffers.length + ')';
     }
 
-    private static final class Component extends WrappedByteBuf {
+    private static final class Component {
         private final int index;
         private final int offset;
+        private final ByteBuf buf;
         private final int endOffset;
 
         Component(int index, int offset, ByteBuf buf) {
-            super(buf);
             this.index = index;
             this.offset = offset;
             endOffset = offset + buf.readableBytes();
+            this.buf = buf;
         }
     }
 }

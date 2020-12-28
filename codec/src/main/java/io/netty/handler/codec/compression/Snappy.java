@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,6 +16,7 @@
 package io.netty.handler.codec.compression;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufUtil;
 
 /**
  * Uncompresses an input {@link ByteBuf} encoded with Snappy compression into an
@@ -23,7 +24,7 @@ import io.netty.buffer.ByteBuf;
  *
  * See <a href="https://github.com/google/snappy/blob/master/format_description.txt">snappy format</a>.
  */
-public final class Snappy {
+class Snappy {
 
     private static final int MAX_HT_SIZE = 1 << 14;
     private static final int MIN_COMPRESSIBLE_BYTES = 15;
@@ -403,19 +404,19 @@ public final class Snappy {
             if (in.readableBytes() < 2) {
                 return NOT_ENOUGH_INPUT;
             }
-            length = in.readUnsignedShortLE();
+            length = ByteBufUtil.swapShort(in.readShort());
             break;
         case 62:
             if (in.readableBytes() < 3) {
                 return NOT_ENOUGH_INPUT;
             }
-            length = in.readUnsignedMediumLE();
+            length = ByteBufUtil.swapMedium(in.readUnsignedMedium());
             break;
         case 63:
             if (in.readableBytes() < 4) {
                 return NOT_ENOUGH_INPUT;
             }
-            length = in.readIntLE();
+            length = ByteBufUtil.swapInt(in.readInt());
             break;
         default:
             length = tag >> 2 & 0x3F;
@@ -495,7 +496,7 @@ public final class Snappy {
 
         int initialIndex = out.writerIndex();
         int length = 1 + (tag >> 2 & 0x03f);
-        int offset = in.readUnsignedShortLE();
+        int offset = ByteBufUtil.swapShort(in.readShort());
 
         validateOffset(offset, writtenSoFar);
 
@@ -539,7 +540,7 @@ public final class Snappy {
 
         int initialIndex = out.writerIndex();
         int length = 1 + (tag >> 2 & 0x03F);
-        int offset = in.readIntLE();
+        int offset = ByteBufUtil.swapInt(in.readInt());
 
         validateOffset(offset, writtenSoFar);
 
@@ -565,7 +566,7 @@ public final class Snappy {
 
     /**
      * Validates that the offset extracted from a compressed reference is within
-     * the permissible bounds of an offset (0 < offset < Integer.MAX_VALUE), and does not
+     * the permissible bounds of an offset (4 <= offset <= 32768), and does not
      * exceed the length of the chunk currently read so far.
      *
      * @param offset The offset extracted from the compressed reference
@@ -573,13 +574,12 @@ public final class Snappy {
      * @throws DecompressionException if the offset is invalid
      */
     private static void validateOffset(int offset, int chunkSizeSoFar) {
-        if (offset == 0) {
-            throw new DecompressionException("Offset is less than minimum permissible value");
+        if (offset > Short.MAX_VALUE) {
+            throw new DecompressionException("Offset exceeds maximum permissible value");
         }
 
-        if (offset < 0) {
-            // Due to arithmetic overflow
-            throw new DecompressionException("Offset is greater than maximum value supported by this implementation");
+        if (offset <= 0) {
+            throw new DecompressionException("Offset is less than minimum permissible value");
         }
 
         if (offset > chunkSizeSoFar) {
@@ -593,7 +593,7 @@ public final class Snappy {
      *
      * @param data The input data to calculate the CRC32C checksum of
      */
-    static int calculateChecksum(ByteBuf data) {
+    public static int calculateChecksum(ByteBuf data) {
         return calculateChecksum(data, data.readerIndex(), data.readableBytes());
     }
 
@@ -603,11 +603,18 @@ public final class Snappy {
      *
      * @param data The input data to calculate the CRC32C checksum of
      */
-    static int calculateChecksum(ByteBuf data, int offset, int length) {
+    public static int calculateChecksum(ByteBuf data, int offset, int length) {
         Crc32c crc32 = new Crc32c();
         try {
-            crc32.update(data, offset, length);
-            return maskChecksum(crc32.getValue());
+            if (data.hasArray()) {
+                crc32.update(data.array(), data.arrayOffset() + offset, length);
+            } else {
+                byte[] array = new byte[length];
+                data.getBytes(offset, array);
+                crc32.update(array, 0, length);
+            }
+
+            return maskChecksum((int) crc32.getValue());
         } finally {
             crc32.reset();
         }
@@ -655,7 +662,7 @@ public final class Snappy {
      * @param checksum The actual checksum of the data
      * @return The masked checksum
      */
-    static int maskChecksum(long checksum) {
-        return (int) ((checksum >> 15 | checksum << 17) + 0xa282ead8);
+    static int maskChecksum(int checksum) {
+        return (checksum >> 15 | checksum << 17) + 0xa282ead8;
     }
 }

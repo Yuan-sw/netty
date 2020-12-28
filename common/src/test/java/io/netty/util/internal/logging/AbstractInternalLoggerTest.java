@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -95,10 +95,6 @@ public abstract class AbstractInternalLoggerTest<T> {
         clazz.getMethod(logMethod, String.class, Throwable.class).invoke(logger, msg, ex);
         assertTrue(result.isEmpty());
 
-        // test xx(Throwable)
-        clazz.getMethod(logMethod, Throwable.class).invoke(logger, ex);
-        assertTrue(result.isEmpty());
-
         // when level log is enabled
         setLevelEnable(level, true);
         assertTrue((Boolean) isXXEnabled.invoke(logger));
@@ -134,11 +130,6 @@ public abstract class AbstractInternalLoggerTest<T> {
         result.clear();
         clazz.getMethod(logMethod, String.class, Throwable.class).invoke(logger, msg, ex);
         assertResult(level, null, ex, msg);
-
-        // test xx(Throwable)
-        result.clear();
-        clazz.getMethod(logMethod, Throwable.class).invoke(logger, ex);
-        assertResult(level, null, ex);
     }
 
     /** a just default code, you can override to fix {@linkplain #mockLog} */

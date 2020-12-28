@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.ChannelOutboundBuffer;
 import io.netty.channel.ChannelPipeline;
-import io.netty.channel.RecvByteBufAllocator;
 import io.netty.channel.ServerChannel;
 
 import java.io.IOException;
@@ -33,7 +32,6 @@ import java.util.List;
  * {@link AbstractNioChannel} base class for {@link Channel}s that operate on messages.
  */
 public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
-    boolean inputShutdown;
 
     /**
      * @see AbstractNioChannel#AbstractNioChannel(Channel, SelectableChannel, int)
@@ -47,14 +45,6 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         return new NioMessageUnsafe();
     }
 
-    @Override
-    protected void doBeginRead() throws Exception {
-        if (inputShutdown) {
-            return;
-        }
-        super.doBeginRead();
-    }
-
     private final class NioMessageUnsafe extends AbstractNioUnsafe {
 
         private final List<Object> readBuf = new ArrayList<Object>();
@@ -63,15 +53,19 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
         public void read() {
             assert eventLoop().inEventLoop();
             final ChannelConfig config = config();
-            final ChannelPipeline pipeline = pipeline();
-            final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
-            allocHandle.reset(config);
+            if (!config.isAutoRead() && !isReadPending()) {
+                // ChannelConfig.setAutoRead(false) was called in the meantime
+                removeReadOp();
+                return;
+            }
 
+            final int maxMessagesPerRead = config.getMaxMessagesPerRead();
+            final ChannelPipeline pipeline = pipeline();
             boolean closed = false;
             Throwable exception = null;
             try {
                 try {
-                    do {
+                    for (;;) {
                         int localRead = doReadMessages(readBuf);
                         if (localRead == 0) {
                             break;
@@ -81,19 +75,25 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                             break;
                         }
 
-                        allocHandle.incMessagesRead(localRead);
-                    } while (allocHandle.continueReading());
+                        // stop reading and remove op
+                        if (!config.isAutoRead()) {
+                            break;
+                        }
+
+                        if (readBuf.size() >= maxMessagesPerRead) {
+                            break;
+                        }
+                    }
                 } catch (Throwable t) {
                     exception = t;
                 }
-
+                setReadPending(false);
                 int size = readBuf.size();
                 for (int i = 0; i < size; i ++) {
-                    readPending = false;
                     pipeline.fireChannelRead(readBuf.get(i));
                 }
+
                 readBuf.clear();
-                allocHandle.readComplete();
                 pipeline.fireChannelReadComplete();
 
                 if (exception != null) {
@@ -103,7 +103,6 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 }
 
                 if (closed) {
-                    inputShutdown = true;
                     if (isOpen()) {
                         close(voidPromise());
                     }
@@ -115,7 +114,7 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
                 // * The user called Channel.read() or ChannelHandlerContext.read() in channelReadComplete(...) method
                 //
                 // See https://github.com/netty/netty/issues/2254
-                if (!readPending && !config.isAutoRead()) {
+                if (!config.isAutoRead() && !isReadPending()) {
                     removeReadOp();
                 }
             }
@@ -172,19 +171,11 @@ public abstract class AbstractNioMessageChannel extends AbstractNioChannel {
     }
 
     protected boolean closeOnReadError(Throwable cause) {
-        if (!isActive()) {
-            // If the channel is not active anymore for whatever reason we should not try to continue reading.
-            return true;
-        }
-        if (cause instanceof PortUnreachableException) {
-            return false;
-        }
-        if (cause instanceof IOException) {
-            // ServerChannel should not be closed even on IOException because it can often continue
-            // accepting incoming connections. (e.g. too many open files)
-            return !(this instanceof ServerChannel);
-        }
-        return true;
+        // ServerChannel should not be closed even on IOException because it can often continue
+        // accepting incoming connections. (e.g. too many open files)
+        return cause instanceof IOException &&
+                !(cause instanceof PortUnreachableException) &&
+                !(this instanceof ServerChannel);
     }
 
     /**

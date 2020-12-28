@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,11 +15,9 @@
  */
 package io.netty.channel;
 
+import io.netty.util.Recycler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.PromiseCombiner;
-import io.netty.util.internal.ObjectPool;
-import io.netty.util.internal.ObjectPool.ObjectCreator;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.SystemPropertyUtil;
 import io.netty.util.internal.logging.InternalLogger;
 import io.netty.util.internal.logging.InternalLoggerFactory;
@@ -39,7 +37,8 @@ public final class PendingWriteQueue {
             SystemPropertyUtil.getInt("io.netty.transport.pendingWriteSizeOverhead", 64);
 
     private final ChannelHandlerContext ctx;
-    private final PendingBytesTracker tracker;
+    private final ChannelOutboundBuffer buffer;
+    private final MessageSizeEstimator.Handle estimatorHandle;
 
     // head and tail pointers for the linked-list structure. If empty head and tail are null.
     private PendingWrite head;
@@ -48,8 +47,12 @@ public final class PendingWriteQueue {
     private long bytes;
 
     public PendingWriteQueue(ChannelHandlerContext ctx) {
-        tracker = PendingBytesTracker.newTracker(ctx.channel());
+        if (ctx == null) {
+            throw new NullPointerException("ctx");
+        }
         this.ctx = ctx;
+        buffer = ctx.channel().unsafe().outboundBuffer();
+        estimatorHandle = ctx.channel().config().getMessageSizeEstimator().newHandle();
     }
 
     /**
@@ -80,7 +83,7 @@ public final class PendingWriteQueue {
     private int size(Object msg) {
         // It is possible for writes to be triggered from removeAndFailAll(). To preserve ordering,
         // we should add them to the queue and let removeAndFailAll() fail them later.
-        int messageSize = tracker.size(msg);
+        int messageSize = estimatorHandle.size(msg);
         if (messageSize < 0) {
             // Size may be unknown so just use 0
             messageSize = 0;
@@ -93,8 +96,12 @@ public final class PendingWriteQueue {
      */
     public void add(Object msg, ChannelPromise promise) {
         assert ctx.executor().inEventLoop();
-        ObjectUtil.checkNotNull(msg, "msg");
-        ObjectUtil.checkNotNull(promise, "promise");
+        if (msg == null) {
+            throw new NullPointerException("msg");
+        }
+        if (promise == null) {
+            throw new NullPointerException("promise");
+        }
         // It is possible for writes to be triggered from removeAndFailAll(). To preserve ordering,
         // we should add them to the queue and let removeAndFailAll() fail them later.
         int messageSize = size(msg);
@@ -109,7 +116,12 @@ public final class PendingWriteQueue {
         }
         size ++;
         bytes += messageSize;
-        tracker.incrementPendingOutboundBytes(write.size);
+        // We need to guard against null as channel.unsafe().outboundBuffer() may returned null
+        // if the channel was already closed when constructing the PendingWriteQueue.
+        // See https://github.com/netty/netty/issues/3967
+        if (buffer != null) {
+            buffer.incrementPendingOutboundBytes(write.size);
+        }
     }
 
     /**
@@ -127,7 +139,7 @@ public final class PendingWriteQueue {
         }
 
         ChannelPromise p = ctx.newPromise();
-        PromiseCombiner combiner = new PromiseCombiner(ctx.executor());
+        PromiseCombiner combiner = new PromiseCombiner();
         try {
             // It is possible for some of the written promises to trigger more writes. The new writes
             // will "revive" the queue, so we need to write them up until the queue is empty.
@@ -141,9 +153,7 @@ public final class PendingWriteQueue {
                     Object msg = write.msg;
                     ChannelPromise promise = write.promise;
                     recycle(write, false);
-                    if (!(promise instanceof VoidChannelPromise)) {
-                        combiner.add(promise);
-                    }
+                    combiner.add(promise);
                     ctx.write(msg, promise);
                     write = next;
                 }
@@ -162,7 +172,9 @@ public final class PendingWriteQueue {
      */
     public void removeAndFailAll(Throwable cause) {
         assert ctx.executor().inEventLoop();
-        ObjectUtil.checkNotNull(cause, "cause");
+        if (cause == null) {
+            throw new NullPointerException("cause");
+        }
         // It is possible for some of the failed promises to trigger more writes. The new writes
         // will "revive" the queue, so we need to clean them up until the queue is empty.
         for (PendingWrite write = head; write != null; write = head) {
@@ -187,9 +199,11 @@ public final class PendingWriteQueue {
      */
     public void removeAndFail(Throwable cause) {
         assert ctx.executor().inEventLoop();
-        ObjectUtil.checkNotNull(cause, "cause");
-
+        if (cause == null) {
+            throw new NullPointerException("cause");
+        }
         PendingWrite write = head;
+
         if (write == null) {
             return;
         }
@@ -272,7 +286,12 @@ public final class PendingWriteQueue {
         }
 
         write.recycle();
-        tracker.decrementPendingOutboundBytes(writeSize);
+        // We need to guard against null as channel.unsafe().outboundBuffer() may returned null
+        // if the channel was already closed when constructing the PendingWriteQueue.
+        // See https://github.com/netty/netty/issues/3967
+        if (buffer != null) {
+            buffer.decrementPendingOutboundBytes(writeSize);
+        }
     }
 
     private static void safeFail(ChannelPromise promise, Throwable cause) {
@@ -285,20 +304,20 @@ public final class PendingWriteQueue {
      * Holds all meta-data and construct the linked-list structure.
      */
     static final class PendingWrite {
-        private static final ObjectPool<PendingWrite> RECYCLER = ObjectPool.newPool(new ObjectCreator<PendingWrite>() {
+        private static final Recycler<PendingWrite> RECYCLER = new Recycler<PendingWrite>() {
             @Override
-            public PendingWrite newObject(ObjectPool.Handle<PendingWrite> handle) {
+            protected PendingWrite newObject(Handle handle) {
                 return new PendingWrite(handle);
             }
-        });
+        };
 
-        private final ObjectPool.Handle<PendingWrite> handle;
+        private final Recycler.Handle handle;
         private PendingWrite next;
         private long size;
         private ChannelPromise promise;
         private Object msg;
 
-        private PendingWrite(ObjectPool.Handle<PendingWrite> handle) {
+        private PendingWrite(Recycler.Handle handle) {
             this.handle = handle;
         }
 
@@ -315,7 +334,7 @@ public final class PendingWriteQueue {
             next = null;
             msg = null;
             promise = null;
-            handle.recycle(this);
+            RECYCLER.recycle(this, handle);
         }
     }
 }

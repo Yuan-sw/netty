@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -26,28 +26,25 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Handles an I/O event or intercepts an I/O operation, and forwards it to its next handler in
- * its {@link ChannelPipeline}.
+ * Handles or intercepts a {@link ChannelInboundInvoker} or {@link ChannelOutboundInvoker} operation, and forwards it
+ * to the next handler in a {@link ChannelPipeline}.
  *
  * <h3>Sub-types</h3>
  * <p>
- * {@link ChannelHandler} itself does not provide many methods, but you usually have to implement one of its subtypes:
+ * {@link ChannelHandler} itself does not provide many methods.  To handle a
+ * a {@link ChannelInboundInvoker} or {@link ChannelOutboundInvoker} operation
+ * you need to implement its sub-interfaces.  There are many different sub-interfaces
+ * which handles inbound and outbound operations.
+ *
+ * But the most useful for developers may be:
  * <ul>
- * <li>{@link ChannelInboundHandler} to handle inbound I/O events, and</li>
- * <li>{@link ChannelOutboundHandler} to handle outbound I/O operations.</li>
+ * <li>{@link ChannelInboundHandlerAdapter} handles and intercepts inbound operations</li>
+ * <li>{@link ChannelOutboundHandlerAdapter} handles and intercepts outbound operations</li>
  * </ul>
- * </p>
- * <p>
- * Alternatively, the following adapter classes are provided for your convenience:
- * <ul>
- * <li>{@link ChannelInboundHandlerAdapter} to handle inbound I/O events,</li>
- * <li>{@link ChannelOutboundHandlerAdapter} to handle outbound I/O operations, and</li>
- * <li>{@link ChannelDuplexHandler} to handle both inbound and outbound events</li>
- * </ul>
- * </p>
- * <p>
- * For more information, please refer to the documentation of each subtype.
- * </p>
+ *
+ * You will also find more detailed explanation from the documentation of
+ * each sub-interface on how an event is interpreted when it goes upstream and
+ * downstream respectively.
  *
  * <h3>The context object</h3>
  * <p>
@@ -56,7 +53,7 @@ import java.lang.annotation.Target;
  * {@link ChannelPipeline} it belongs to via a context object.  Using the
  * context object, the {@link ChannelHandler} can pass events upstream or
  * downstream, modify the pipeline dynamically, or store the information
- * (using {@link AttributeKey}s) which is specific to the handler.
+ *  (using {@link AttributeKey}s) which is specific to the handler.
  *
  * <h3>State management</h3>
  *
@@ -73,12 +70,13 @@ import java.lang.annotation.Target;
  *
  *     {@code @Override}
  *     public void channelRead0({@link ChannelHandlerContext} ctx, Message message) {
+ *         {@link Channel} ch = e.getChannel();
  *         if (message instanceof LoginMessage) {
  *             authenticate((LoginMessage) message);
  *             <b>loggedIn = true;</b>
  *         } else (message instanceof GetDataMessage) {
  *             if (<b>loggedIn</b>) {
- *                 ctx.writeAndFlush(fetchSecret((GetDataMessage) message));
+ *                 ch.write(fetchSecret((GetDataMessage) message));
  *             } else {
  *                 fail();
  *             }
@@ -103,7 +101,7 @@ import java.lang.annotation.Target;
  *
  * </pre>
  *
- * <h4>Using {@link AttributeKey}s</h4>
+ * <h4>Using {@link AttributeKey}</h4>
  *
  * Although it's recommended to use member variables to store the state of a
  * handler, for some reason you might not want to create many handler instances.
@@ -122,12 +120,13 @@ import java.lang.annotation.Target;
  *     {@code @Override}
  *     public void channelRead({@link ChannelHandlerContext} ctx, Message message) {
  *         {@link Attribute}&lt;{@link Boolean}&gt; attr = ctx.attr(auth);
+ *         {@link Channel} ch = ctx.channel();
  *         if (message instanceof LoginMessage) {
  *             authenticate((LoginMessage) o);
  *             <b>attr.set(true)</b>;
  *         } else (message instanceof GetDataMessage) {
  *             if (<b>Boolean.TRUE.equals(attr.get())</b>) {
- *                 ctx.writeAndFlush(fetchSecret((GetDataMessage) o));
+ *                 ch.write(fetchSecret((GetDataMessage) o));
  *             } else {
  *                 fail();
  *             }
@@ -136,7 +135,7 @@ import java.lang.annotation.Target;
  *     ...
  * }
  * </pre>
- * Now that the state of the handler is attached to the {@link ChannelHandlerContext}, you can add the
+ * Now that the state of the handler isattached to the {@link ChannelHandlerContext}, you can add the
  * same handler instance to different pipelines:
  * <pre>
  * public class DataServerInitializer extends {@link ChannelInitializer}&lt;{@link Channel}&gt; {
@@ -191,8 +190,7 @@ public interface ChannelHandler {
     /**
      * Gets called if a {@link Throwable} was thrown.
      *
-     * @deprecated if you want to handle this event you should implement {@link ChannelInboundHandler} and
-     * implement the method there.
+     * @deprecated is part of {@link ChannelInboundHandler}
      */
     @Deprecated
     void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception;

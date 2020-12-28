@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,6 +19,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
 import io.netty.channel.socket.ServerSocketChannel;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.unix.FileDescriptor;
+import io.netty.channel.unix.Socket;
 import io.netty.util.concurrent.GlobalEventExecutor;
 
 import java.io.IOException;
@@ -29,7 +31,7 @@ import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.Executor;
 
-import static io.netty.channel.epoll.LinuxSocket.newSocketStream;
+import static io.netty.channel.unix.Socket.newSocketStream;
 
 /**
  * {@link SocketChannel} implementation that uses linux EPOLL Edge-Triggered Mode for
@@ -46,17 +48,24 @@ public final class EpollSocketChannel extends AbstractEpollStreamChannel impleme
         config = new EpollSocketChannelConfig(this);
     }
 
-    public EpollSocketChannel(int fd) {
+    /**
+     * @deprecated Use {@link #EpollSocketChannel(Socket, boolean)}.
+     */
+    @Deprecated
+    public EpollSocketChannel(FileDescriptor fd) {
         super(fd);
         config = new EpollSocketChannelConfig(this);
     }
 
-    EpollSocketChannel(LinuxSocket fd, boolean active) {
+    /**
+     * Creates a new {@link EpollSocketChannel} from an existing {@link FileDescriptor}.
+     */
+    public EpollSocketChannel(Socket fd, boolean active) {
         super(fd, active);
         config = new EpollSocketChannelConfig(this);
     }
 
-    EpollSocketChannel(Channel parent, LinuxSocket fd, InetSocketAddress remoteAddress) {
+    EpollSocketChannel(Channel parent, Socket fd, InetSocketAddress remoteAddress) {
         super(parent, fd, remoteAddress);
         config = new EpollSocketChannelConfig(this);
 
@@ -66,8 +75,7 @@ public final class EpollSocketChannel extends AbstractEpollStreamChannel impleme
     }
 
     /**
-     * Returns the {@code TCP_INFO} for the current socket.
-     * See <a href="https://linux.die.net//man/7/tcp">man 7 tcp</a>.
+     * Returns the {@code TCP_INFO} for the current socket. See <a href="http://linux.die.net/man/7/tcp">man 7 tcp</a>.
      */
     public EpollTcpInfo tcpInfo() {
         return tcpInfo(new EpollTcpInfo());
@@ -75,11 +83,11 @@ public final class EpollSocketChannel extends AbstractEpollStreamChannel impleme
 
     /**
      * Updates and returns the {@code TCP_INFO} for the current socket.
-     * See <a href="https://linux.die.net//man/7/tcp">man 7 tcp</a>.
+     * See <a href="http://linux.die.net/man/7/tcp">man 7 tcp</a>.
      */
     public EpollTcpInfo tcpInfo(EpollTcpInfo info) {
         try {
-            socket.getTcpInfo(info);
+            Native.tcpInfo(fd().intValue(), info);
             return info;
         } catch (IOException e) {
             throw new ChannelException(e);

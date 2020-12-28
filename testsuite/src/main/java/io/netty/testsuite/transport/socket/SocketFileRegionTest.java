@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -22,25 +22,22 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandler;
-import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultFileRegion;
 import io.netty.channel.FileRegion;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.util.internal.PlatformDependent;
-import org.hamcrest.CoreMatchers;
 import org.junit.Test;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.RandomAccessFile;
 import java.nio.channels.WritableByteChannel;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.hamcrest.CoreMatchers.is;
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.*;
 
 public class SocketFileRegionTest extends AbstractSocketTest {
@@ -76,11 +73,6 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         run();
     }
 
-    @Test
-    public void testFileRegionCountLargerThenFile() throws Throwable {
-        run();
-    }
-
     public void testFileRegion(ServerBootstrap sb, Bootstrap cb) throws Throwable {
         testFileRegion0(sb, cb, false, true, true);
     }
@@ -99,34 +91,6 @@ public class SocketFileRegionTest extends AbstractSocketTest {
 
     public void testFileRegionVoidPromiseNotAutoRead(ServerBootstrap sb, Bootstrap cb) throws Throwable {
         testFileRegion0(sb, cb, true, false, true);
-    }
-
-    public void testFileRegionCountLargerThenFile(ServerBootstrap sb, Bootstrap cb) throws Throwable {
-        File file = File.createTempFile("netty-", ".tmp");
-        file.deleteOnExit();
-
-        final FileOutputStream out = new FileOutputStream(file);
-        out.write(data);
-        out.close();
-
-        sb.childHandler(new SimpleChannelInboundHandler<ByteBuf>() {
-            @Override
-            protected void channelRead0(ChannelHandlerContext ctx, ByteBuf msg) {
-                // Just drop the message.
-            }
-        });
-        cb.handler(new ChannelInboundHandlerAdapter());
-
-        Channel sc = sb.bind().sync().channel();
-        Channel cc = cb.connect(sc.localAddress()).sync().channel();
-
-        // Request file region which is bigger then the underlying file.
-        FileRegion region = new DefaultFileRegion(
-                new RandomAccessFile(file, "r").getChannel(), 0, data.length + 1024);
-
-        assertThat(cc.writeAndFlush(region).await().cause(), CoreMatchers.<Throwable>instanceOf(IOException.class));
-        cc.close().sync();
-        sc.close().sync();
     }
 
     private static void testFileRegion0(
@@ -160,14 +124,14 @@ public class SocketFileRegionTest extends AbstractSocketTest {
 
         ChannelInboundHandler ch = new SimpleChannelInboundHandler<Object>() {
             @Override
-            public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
-            }
-
-            @Override
             public void channelReadComplete(ChannelHandlerContext ctx) throws Exception {
                 if (!autoRead) {
                     ctx.read();
                 }
+            }
+
+            @Override
+            public void channelRead0(ChannelHandlerContext ctx, Object msg) throws Exception {
             }
 
             @Override
@@ -184,8 +148,8 @@ public class SocketFileRegionTest extends AbstractSocketTest {
 
         Channel cc = cb.connect(sc.localAddress()).sync().channel();
         FileRegion region = new DefaultFileRegion(
-                new RandomAccessFile(file, "r").getChannel(), startOffset, data.length - bufferSize);
-        FileRegion emptyRegion = new DefaultFileRegion(new RandomAccessFile(file, "r").getChannel(), 0, 0);
+                new FileInputStream(file).getChannel(), startOffset, data.length - bufferSize);
+        FileRegion emptyRegion = new DefaultFileRegion(new FileInputStream(file).getChannel(), 0, 0);
 
         if (!defaultFileRegion) {
             region = new FileRegionWrapper(region);
@@ -301,17 +265,12 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         @Override
         @Deprecated
         public long transfered() {
-            return region.transferred();
+            return region.transfered();
         }
 
         @Override
         public boolean release() {
             return region.release();
-        }
-
-        @Override
-        public long transferred() {
-            return region.transferred();
         }
 
         @Override
@@ -338,18 +297,6 @@ public class SocketFileRegionTest extends AbstractSocketTest {
         @Override
         public FileRegion retain(int increment) {
             region.retain(increment);
-            return this;
-        }
-
-        @Override
-        public FileRegion touch() {
-            region.touch();
-            return this;
-        }
-
-        @Override
-        public FileRegion touch(Object hint) {
-            region.touch(hint);
             return this;
         }
     }

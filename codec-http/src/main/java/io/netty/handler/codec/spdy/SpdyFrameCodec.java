@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -47,62 +47,35 @@ public class SpdyFrameCodec extends ByteToMessageDecoder
 
     private ChannelHandlerContext ctx;
     private boolean read;
-    private final boolean validateHeaders;
 
     /**
-     * Creates a new instance with the specified {@code version},
-     * {@code validateHeaders (true)}, and
+     * Creates a new instance with the specified {@code version} and
      * the default decoder and encoder options
      * ({@code maxChunkSize (8192)}, {@code maxHeaderSize (16384)},
      * {@code compressionLevel (6)}, {@code windowBits (15)},
      * and {@code memLevel (8)}).
      */
     public SpdyFrameCodec(SpdyVersion version) {
-        this(version, true);
+        this(version, 8192, 16384, 6, 15, 8);
     }
 
     /**
-     * Creates a new instance with the specified {@code version},
-     * {@code validateHeaders}, and
-     * the default decoder and encoder options
-     * ({@code maxChunkSize (8192)}, {@code maxHeaderSize (16384)},
-     * {@code compressionLevel (6)}, {@code windowBits (15)},
-     * and {@code memLevel (8)}).
-     */
-    public SpdyFrameCodec(SpdyVersion version, boolean validateHeaders) {
-        this(version, 8192, 16384, 6, 15, 8, validateHeaders);
-    }
-
-    /**
-     * Creates a new instance with the specified {@code version}, {@code validateHeaders (true)},
-     * decoder and encoder options.
+     * Creates a new instance with the specified decoder and encoder options.
      */
     public SpdyFrameCodec(
             SpdyVersion version, int maxChunkSize, int maxHeaderSize,
             int compressionLevel, int windowBits, int memLevel) {
-        this(version, maxChunkSize, maxHeaderSize, compressionLevel, windowBits, memLevel, true);
-    }
-
-    /**
-     * Creates a new instance with the specified {@code version}, {@code validateHeaders},
-     * decoder and encoder options.
-     */
-    public SpdyFrameCodec(
-            SpdyVersion version, int maxChunkSize, int maxHeaderSize,
-            int compressionLevel, int windowBits, int memLevel, boolean validateHeaders) {
         this(version, maxChunkSize,
                 SpdyHeaderBlockDecoder.newInstance(version, maxHeaderSize),
-                SpdyHeaderBlockEncoder.newInstance(version, compressionLevel, windowBits, memLevel), validateHeaders);
+                SpdyHeaderBlockEncoder.newInstance(version, compressionLevel, windowBits, memLevel));
     }
 
     protected SpdyFrameCodec(SpdyVersion version, int maxChunkSize,
-            SpdyHeaderBlockDecoder spdyHeaderBlockDecoder, SpdyHeaderBlockEncoder spdyHeaderBlockEncoder,
-            boolean validateHeaders) {
+            SpdyHeaderBlockDecoder spdyHeaderBlockDecoder, SpdyHeaderBlockEncoder spdyHeaderBlockEncoder) {
         spdyFrameDecoder = new SpdyFrameDecoder(version, this, maxChunkSize);
         spdyFrameEncoder = new SpdyFrameEncoder(version);
         this.spdyHeaderBlockDecoder = spdyHeaderBlockDecoder;
         this.spdyHeaderBlockEncoder = spdyHeaderBlockEncoder;
-        this.validateHeaders = validateHeaders;
     }
 
     @Override
@@ -301,8 +274,7 @@ public class SpdyFrameCodec extends ByteToMessageDecoder
     @Override
     public void readSynStreamFrame(
             int streamId, int associatedToStreamId, byte priority, boolean last, boolean unidirectional) {
-        SpdySynStreamFrame spdySynStreamFrame =
-                new DefaultSpdySynStreamFrame(streamId, associatedToStreamId, priority, validateHeaders);
+        SpdySynStreamFrame spdySynStreamFrame = new DefaultSpdySynStreamFrame(streamId, associatedToStreamId, priority);
         spdySynStreamFrame.setLast(last);
         spdySynStreamFrame.setUnidirectional(unidirectional);
         spdyHeadersFrame = spdySynStreamFrame;
@@ -310,7 +282,7 @@ public class SpdyFrameCodec extends ByteToMessageDecoder
 
     @Override
     public void readSynReplyFrame(int streamId, boolean last) {
-        SpdySynReplyFrame spdySynReplyFrame = new DefaultSpdySynReplyFrame(streamId, validateHeaders);
+        SpdySynReplyFrame spdySynReplyFrame = new DefaultSpdySynReplyFrame(streamId);
         spdySynReplyFrame.setLast(last);
         spdyHeadersFrame = spdySynReplyFrame;
     }
@@ -363,7 +335,7 @@ public class SpdyFrameCodec extends ByteToMessageDecoder
 
     @Override
     public void readHeadersFrame(int streamId, boolean last) {
-        spdyHeadersFrame = new DefaultSpdyHeadersFrame(streamId, validateHeaders);
+        spdyHeadersFrame = new DefaultSpdyHeadersFrame(streamId);
         spdyHeadersFrame.setLast(last);
     }
 

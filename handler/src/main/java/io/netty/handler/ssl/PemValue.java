@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -34,7 +34,7 @@ class PemValue extends AbstractReferenceCounted implements PemEncoded {
 
     private final boolean sensitive;
 
-    PemValue(ByteBuf content, boolean sensitive) {
+    public PemValue(ByteBuf content, boolean sensitive) {
         this.content = ObjectUtil.checkNotNull(content, "content");
         this.sensitive = sensitive;
     }
@@ -56,33 +56,12 @@ class PemValue extends AbstractReferenceCounted implements PemEncoded {
 
     @Override
     public PemValue copy() {
-        return replace(content.copy());
+        return new PemValue(content.copy(), sensitive);
     }
 
     @Override
     public PemValue duplicate() {
-        return replace(content.duplicate());
-    }
-
-    @Override
-    public PemValue retainedDuplicate() {
-        return replace(content.retainedDuplicate());
-    }
-
-    @Override
-    public PemValue replace(ByteBuf content) {
-        return new PemValue(content, sensitive);
-    }
-
-    @Override
-    public PemValue touch() {
-        return (PemValue) super.touch();
-    }
-
-    @Override
-    public PemValue touch(Object hint) {
-        content.touch(hint);
-        return this;
+        return new PemValue(content.duplicate(), sensitive);
     }
 
     @Override

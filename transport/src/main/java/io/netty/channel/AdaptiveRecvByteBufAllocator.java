@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,12 +15,11 @@
  */
 package io.netty.channel;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+
 import java.util.ArrayList;
 import java.util.List;
-
-import static io.netty.util.internal.ObjectUtil.checkPositive;
-import static java.lang.Math.max;
-import static java.lang.Math.min;
 
 /**
  * The {@link RecvByteBufAllocator} that automatically increases and
@@ -32,11 +31,10 @@ import static java.lang.Math.min;
  * amount of the allocated buffer two times consecutively.  Otherwise, it keeps
  * returning the same prediction.
  */
-public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufAllocator {
+public class AdaptiveRecvByteBufAllocator implements RecvByteBufAllocator {
 
     static final int DEFAULT_MINIMUM = 64;
-    // Use an initial value that is bigger than the common MTU of 1500
-    static final int DEFAULT_INITIAL = 2048;
+    static final int DEFAULT_INITIAL = 1024;
     static final int DEFAULT_MAXIMUM = 65536;
 
     private static final int INDEX_INCREMENT = 4;
@@ -50,8 +48,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             sizeTable.add(i);
         }
 
-        // Suppress a warning since i becomes negative when an integer overflow happens
-        for (int i = 512; i > 0; i <<= 1) { // lgtm[java/constant-comparison]
+        for (int i = 512; i > 0; i <<= 1) {
             sizeTable.add(i);
         }
 
@@ -61,10 +58,6 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         }
     }
 
-    /**
-     * @deprecated There is state for {@link #maxMessagesPerRead()} which is typically based upon channel type.
-     */
-    @Deprecated
     public static final AdaptiveRecvByteBufAllocator DEFAULT = new AdaptiveRecvByteBufAllocator();
 
     private static int getSizeTableIndex(final int size) {
@@ -91,7 +84,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         }
     }
 
-    private final class HandleImpl extends MaxMessageHandle {
+    private static final class HandleImpl implements Handle {
         private final int minIndex;
         private final int maxIndex;
         private int index;
@@ -107,15 +100,8 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         }
 
         @Override
-        public void lastBytesRead(int bytes) {
-            // If we read as much as we asked for we should check if we need to ramp up the size of our next guess.
-            // This helps adjust more quickly when large amounts of data is pending and can avoid going back to
-            // the selector to check for more data. Going back to the selector can add significant latency for large
-            // data transfers.
-            if (bytes == attemptedBytesRead()) {
-                record(bytes);
-            }
-            super.lastBytesRead(bytes);
+        public ByteBuf allocate(ByteBufAllocator alloc) {
+            return alloc.ioBuffer(nextReceiveBufferSize);
         }
 
         @Override
@@ -123,25 +109,21 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
             return nextReceiveBufferSize;
         }
 
-        private void record(int actualReadBytes) {
-            if (actualReadBytes <= SIZE_TABLE[max(0, index - INDEX_DECREMENT)]) {
+        @Override
+        public void record(int actualReadBytes) {
+            if (actualReadBytes <= SIZE_TABLE[Math.max(0, index - INDEX_DECREMENT - 1)]) {
                 if (decreaseNow) {
-                    index = max(index - INDEX_DECREMENT, minIndex);
+                    index = Math.max(index - INDEX_DECREMENT, minIndex);
                     nextReceiveBufferSize = SIZE_TABLE[index];
                     decreaseNow = false;
                 } else {
                     decreaseNow = true;
                 }
             } else if (actualReadBytes >= nextReceiveBufferSize) {
-                index = min(index + INDEX_INCREMENT, maxIndex);
+                index = Math.min(index + INDEX_INCREMENT, maxIndex);
                 nextReceiveBufferSize = SIZE_TABLE[index];
                 decreaseNow = false;
             }
-        }
-
-        @Override
-        public void readComplete() {
-            record(totalBytesRead());
         }
     }
 
@@ -154,7 +136,7 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      * parameters, the expected buffer size starts from {@code 1024}, does not
      * go down below {@code 64}, and does not go up above {@code 65536}.
      */
-    public AdaptiveRecvByteBufAllocator() {
+    private AdaptiveRecvByteBufAllocator() {
         this(DEFAULT_MINIMUM, DEFAULT_INITIAL, DEFAULT_MAXIMUM);
     }
 
@@ -166,7 +148,9 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
      * @param maximum  the inclusive upper bound of the expected buffer size
      */
     public AdaptiveRecvByteBufAllocator(int minimum, int initial, int maximum) {
-        checkPositive(minimum, "minimum");
+        if (minimum <= 0) {
+            throw new IllegalArgumentException("minimum: " + minimum);
+        }
         if (initial < minimum) {
             throw new IllegalArgumentException("initial: " + initial);
         }
@@ -191,15 +175,8 @@ public class AdaptiveRecvByteBufAllocator extends DefaultMaxMessagesRecvByteBufA
         this.initial = initial;
     }
 
-    @SuppressWarnings("deprecation")
     @Override
     public Handle newHandle() {
         return new HandleImpl(minIndex, maxIndex, initial);
-    }
-
-    @Override
-    public AdaptiveRecvByteBufAllocator respectMaybeMoreData(boolean respectMaybeMoreData) {
-        super.respectMaybeMoreData(respectMaybeMoreData);
-        return this;
     }
 }

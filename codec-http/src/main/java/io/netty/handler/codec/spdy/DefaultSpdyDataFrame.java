@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,9 +16,8 @@
 package io.netty.handler.codec.spdy;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufUtil;
 import io.netty.buffer.Unpooled;
-import io.netty.util.internal.ObjectUtil;
+import io.netty.util.IllegalReferenceCountException;
 import io.netty.util.internal.StringUtil;
 
 /**
@@ -45,8 +44,10 @@ public class DefaultSpdyDataFrame extends DefaultSpdyStreamFrame implements Spdy
      */
     public DefaultSpdyDataFrame(int streamId, ByteBuf data) {
         super(streamId);
-        this.data = validate(
-                ObjectUtil.checkNotNull(data, "data"));
+        if (data == null) {
+            throw new NullPointerException("data");
+        }
+        this.data = validate(data);
     }
 
     private static ByteBuf validate(ByteBuf data) {
@@ -71,27 +72,22 @@ public class DefaultSpdyDataFrame extends DefaultSpdyStreamFrame implements Spdy
 
     @Override
     public ByteBuf content() {
-        return ByteBufUtil.ensureAccessible(data);
+        if (data.refCnt() <= 0) {
+            throw new IllegalReferenceCountException(data.refCnt());
+        }
+        return data;
     }
 
     @Override
     public SpdyDataFrame copy() {
-        return replace(content().copy());
+        SpdyDataFrame frame = new DefaultSpdyDataFrame(streamId(), content().copy());
+        frame.setLast(isLast());
+        return frame;
     }
 
     @Override
     public SpdyDataFrame duplicate() {
-        return replace(content().duplicate());
-    }
-
-    @Override
-    public SpdyDataFrame retainedDuplicate() {
-        return replace(content().retainedDuplicate());
-    }
-
-    @Override
-    public SpdyDataFrame replace(ByteBuf content) {
-        SpdyDataFrame frame = new DefaultSpdyDataFrame(streamId(), content);
+        SpdyDataFrame frame = new DefaultSpdyDataFrame(streamId(), content().duplicate());
         frame.setLast(isLast());
         return frame;
     }
@@ -110,18 +106,6 @@ public class DefaultSpdyDataFrame extends DefaultSpdyStreamFrame implements Spdy
     @Override
     public SpdyDataFrame retain(int increment) {
         data.retain(increment);
-        return this;
-    }
-
-    @Override
-    public SpdyDataFrame touch() {
-        data.touch();
-        return this;
-    }
-
-    @Override
-    public SpdyDataFrame touch(Object hint) {
-        data.touch(hint);
         return this;
     }
 

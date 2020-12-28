@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,8 +18,6 @@ package io.netty.channel.oio;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.FileRegion;
-import io.netty.channel.RecvByteBufAllocator;
-import io.netty.util.internal.ObjectUtil;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -32,10 +30,7 @@ import java.nio.channels.WritableByteChannel;
 
 /**
  * Abstract base class for OIO Channels that are based on streams.
- *
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
 public abstract class OioByteStreamChannel extends AbstractOioByteChannel {
 
     private static final InputStream CLOSED_IN = new InputStream() {
@@ -76,8 +71,14 @@ public abstract class OioByteStreamChannel extends AbstractOioByteChannel {
         if (this.os != null) {
             throw new IllegalStateException("output was set already");
         }
-        this.is = ObjectUtil.checkNotNull(is, "is");
-        this.os = ObjectUtil.checkNotNull(os, "os");
+        if (is == null) {
+            throw new NullPointerException("is");
+        }
+        if (os == null) {
+            throw new NullPointerException("os");
+        }
+        this.is = is;
+        this.os = os;
     }
 
     @Override
@@ -102,9 +103,8 @@ public abstract class OioByteStreamChannel extends AbstractOioByteChannel {
 
     @Override
     protected int doReadBytes(ByteBuf buf) throws Exception {
-        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
-        allocHandle.attemptedBytesRead(Math.max(1, Math.min(available(), buf.maxWritableBytes())));
-        return buf.writeBytes(is, allocHandle.attemptedBytesRead());
+        int length = Math.max(1, Math.min(available(), buf.maxWritableBytes()));
+        return buf.writeBytes(is, length);
     }
 
     @Override
@@ -142,9 +142,9 @@ public abstract class OioByteStreamChannel extends AbstractOioByteChannel {
     }
 
     private static void checkEOF(FileRegion region) throws IOException {
-        if (region.transferred() < region.count()) {
+        if (region.transfered() < region.count()) {
             throw new EOFException("Expected to be able to write " + region.count() + " bytes, " +
-                                   "but only wrote " + region.transferred());
+                                   "but only wrote " + region.transfered());
         }
     }
 

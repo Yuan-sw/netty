@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -161,12 +161,12 @@ public final class UnorderedThreadPoolEventExecutor extends ScheduledThreadPoolE
     @Override
     protected <V> RunnableScheduledFuture<V> decorateTask(Runnable runnable, RunnableScheduledFuture<V> task) {
         return runnable instanceof NonNotifyRunnable ?
-                task : new RunnableScheduledFutureTask<V>(this, task);
+                task : new RunnableScheduledFutureTask<V>(this, runnable, task);
     }
 
     @Override
     protected <V> RunnableScheduledFuture<V> decorateTask(Callable<V> callable, RunnableScheduledFuture<V> task) {
-        return new RunnableScheduledFutureTask<V>(this, task);
+        return new RunnableScheduledFutureTask<V>(this, callable, task);
     }
 
     @Override
@@ -213,8 +213,15 @@ public final class UnorderedThreadPoolEventExecutor extends ScheduledThreadPoolE
             implements RunnableScheduledFuture<V>, ScheduledFuture<V> {
         private final RunnableScheduledFuture<V> future;
 
-        RunnableScheduledFutureTask(EventExecutor executor, RunnableScheduledFuture<V> future) {
-            super(executor, future);
+        RunnableScheduledFutureTask(EventExecutor executor, Runnable runnable,
+                                           RunnableScheduledFuture<V> future) {
+            super(executor, runnable, null);
+            this.future = future;
+        }
+
+        RunnableScheduledFutureTask(EventExecutor executor, Callable<V> callable,
+                                           RunnableScheduledFuture<V> future) {
+            super(executor, callable);
             this.future = future;
         }
 
@@ -225,7 +232,7 @@ public final class UnorderedThreadPoolEventExecutor extends ScheduledThreadPoolE
             } else if (!isDone()) {
                 try {
                     // Its a periodic task so we need to ignore the return value
-                    runTask();
+                    task.call();
                 } catch (Throwable cause) {
                     if (!tryFailureInternal(cause)) {
                         logger.warn("Failure during execution of task", cause);

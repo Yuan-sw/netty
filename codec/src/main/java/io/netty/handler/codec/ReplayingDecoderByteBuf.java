@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -15,23 +15,21 @@
  */
 package io.netty.handler.codec;
 
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.ByteBufProcessor;
+import io.netty.buffer.SwappedByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.util.Signal;
+import io.netty.util.internal.StringUtil;
+
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
-
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
-import io.netty.buffer.SwappedByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.util.ByteProcessor;
-import io.netty.util.Signal;
-import io.netty.util.internal.ObjectUtil;
-import io.netty.util.internal.StringUtil;
 
 /**
  * Special {@link ByteBuf} implementation which is used by the {@link ReplayingDecoder}
@@ -75,7 +73,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf capacity(int newCapacity) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -86,17 +85,6 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     @Override
     public ByteBufAllocator alloc() {
         return buffer.alloc();
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return false;
-    }
-
-    @SuppressWarnings("deprecation")
-    @Override
-    public ByteBuf asReadOnly() {
-        return Unpooled.unmodifiableBuffer(this);
     }
 
     @Override
@@ -131,7 +119,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf clear() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -141,12 +130,14 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public int compareTo(ByteBuf buffer) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf copy() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -157,27 +148,26 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf discardReadBytes() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf ensureWritable(int writableBytes) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public int ensureWritable(int minWritableBytes, boolean force) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf duplicate() {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf retainedDuplicate() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -214,7 +204,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf getBytes(int index, ByteBuffer dst) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -226,27 +217,26 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf getBytes(int index, ByteBuf dst, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf getBytes(int index, ByteBuf dst) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public int getBytes(int index, GatheringByteChannel out, int length) {
-        throw reject();
-    }
-
-    @Override
-    public int getBytes(int index, FileChannel out, long position, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf getBytes(int index, OutputStream out, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -256,21 +246,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int getIntLE(int index) {
-        checkIndex(index, 4);
-        return buffer.getIntLE(index);
-    }
-
-    @Override
     public long getUnsignedInt(int index) {
         checkIndex(index, 4);
         return buffer.getUnsignedInt(index);
-    }
-
-    @Override
-    public long getUnsignedIntLE(int index) {
-        checkIndex(index, 4);
-        return buffer.getUnsignedIntLE(index);
     }
 
     @Override
@@ -280,21 +258,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public long getLongLE(int index) {
-        checkIndex(index, 8);
-        return buffer.getLongLE(index);
-    }
-
-    @Override
     public int getMedium(int index) {
         checkIndex(index, 3);
         return buffer.getMedium(index);
-    }
-
-    @Override
-    public int getMediumLE(int index) {
-        checkIndex(index, 3);
-        return buffer.getMediumLE(index);
     }
 
     @Override
@@ -304,33 +270,15 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int getUnsignedMediumLE(int index) {
-        checkIndex(index, 3);
-        return buffer.getUnsignedMediumLE(index);
-    }
-
-    @Override
     public short getShort(int index) {
         checkIndex(index, 2);
         return buffer.getShort(index);
     }
 
     @Override
-    public short getShortLE(int index) {
-        checkIndex(index, 2);
-        return buffer.getShortLE(index);
-    }
-
-    @Override
     public int getUnsignedShort(int index) {
         checkIndex(index, 2);
         return buffer.getUnsignedShort(index);
-    }
-
-    @Override
-    public int getUnsignedShortLE(int index) {
-        checkIndex(index, 2);
-        return buffer.getUnsignedShortLE(index);
     }
 
     @Override
@@ -352,14 +300,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public CharSequence getCharSequence(int index, int length, Charset charset) {
-        checkIndex(index, length);
-        return buffer.getCharSequence(index, length, charset);
-    }
-
-    @Override
     public int hashCode() {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
@@ -386,7 +329,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public int bytesBefore(int length, byte value) {
-        return bytesBefore(buffer.readerIndex(), length, value);
+        final int readerIndex = buffer.readerIndex();
+        return bytesBefore(readerIndex, buffer.writerIndex() - readerIndex, value);
     }
 
     @Override
@@ -409,7 +353,7 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByte(ByteProcessor processor) {
+    public int forEachByte(ByteBufProcessor processor) {
         int ret = buffer.forEachByte(processor);
         if (ret < 0) {
             throw REPLAY;
@@ -419,7 +363,7 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         final int writerIndex = buffer.writerIndex();
         if (index >= writerIndex) {
             throw REPLAY;
@@ -438,16 +382,17 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByteDesc(ByteProcessor processor) {
+    public int forEachByteDesc(ByteBufProcessor processor) {
         if (terminated) {
             return buffer.forEachByteDesc(processor);
         } else {
-            throw reject();
+            reject();
+            return 0;
         }
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         if (index + length > buffer.writerIndex()) {
             throw REPLAY;
         }
@@ -463,7 +408,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf markWriterIndex() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -473,7 +419,10 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf order(ByteOrder endianness) {
-        if (ObjectUtil.checkNotNull(endianness, "endianness") == order()) {
+        if (endianness == null) {
+            throw new NullPointerException("endianness");
+        }
+        if (endianness == order()) {
             return this;
         }
 
@@ -486,12 +435,12 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public boolean isReadable() {
-        return !terminated || buffer.isReadable();
+        return terminated? buffer.isReadable() : true;
     }
 
     @Override
     public boolean isReadable(int size) {
-        return !terminated || buffer.isReadable(size);
+        return terminated? buffer.isReadable(size) : true;
     }
 
     @Override
@@ -537,7 +486,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf readBytes(ByteBuffer dst) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -549,7 +499,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf readBytes(ByteBuf dst, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -561,12 +512,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public int readBytes(GatheringByteChannel out, int length) {
-        throw reject();
-    }
-
-    @Override
-    public int readBytes(FileChannel out, long position, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
@@ -582,14 +529,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf readRetainedSlice(int length) {
-        checkReadableBytes(length);
-        return buffer.readRetainedSlice(length);
-    }
-
-    @Override
     public ByteBuf readBytes(OutputStream out, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -610,21 +552,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readIntLE() {
-        checkReadableBytes(4);
-        return buffer.readIntLE();
-    }
-
-    @Override
     public long readUnsignedInt() {
         checkReadableBytes(4);
         return buffer.readUnsignedInt();
-    }
-
-    @Override
-    public long readUnsignedIntLE() {
-        checkReadableBytes(4);
-        return buffer.readUnsignedIntLE();
     }
 
     @Override
@@ -634,21 +564,9 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public long readLongLE() {
-        checkReadableBytes(8);
-        return buffer.readLongLE();
-    }
-
-    @Override
     public int readMedium() {
         checkReadableBytes(3);
         return buffer.readMedium();
-    }
-
-    @Override
-    public int readMediumLE() {
-        checkReadableBytes(3);
-        return buffer.readMediumLE();
     }
 
     @Override
@@ -658,33 +576,15 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readUnsignedMediumLE() {
-        checkReadableBytes(3);
-        return buffer.readUnsignedMediumLE();
-    }
-
-    @Override
     public short readShort() {
         checkReadableBytes(2);
         return buffer.readShort();
     }
 
     @Override
-    public short readShortLE() {
-        checkReadableBytes(2);
-        return buffer.readShortLE();
-    }
-
-    @Override
     public int readUnsignedShort() {
         checkReadableBytes(2);
         return buffer.readUnsignedShort();
-    }
-
-    @Override
-    public int readUnsignedShortLE() {
-        checkReadableBytes(2);
-        return buffer.readUnsignedShortLE();
     }
 
     @Override
@@ -706,12 +606,6 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
     }
 
     @Override
-    public CharSequence readCharSequence(int length, Charset charset) {
-        checkReadableBytes(length);
-        return buffer.readCharSequence(length, charset);
-    }
-
-    @Override
     public ByteBuf resetReaderIndex() {
         buffer.resetReaderIndex();
         return this;
@@ -719,127 +613,122 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf resetWriterIndex() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBoolean(int index, boolean value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setByte(int index, int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, byte[] src, int srcIndex, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, byte[] src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, ByteBuffer src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, ByteBuf src, int srcIndex, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, ByteBuf src, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setBytes(int index, ByteBuf src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public int setBytes(int index, InputStream in, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf setZero(int index, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public int setBytes(int index, ScatteringByteChannel in, int length) {
-        throw reject();
-    }
-
-    @Override
-    public int setBytes(int index, FileChannel in, long position, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf setIndex(int readerIndex, int writerIndex) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setInt(int index, int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf setIntLE(int index, int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setLong(int index, long value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setMedium(int index, int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setShort(int index, int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf setShortLE(int index, int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setChar(int index, int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setFloat(int index, float value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf setDouble(int index, double value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -851,22 +740,12 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf slice() {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf retainedSlice() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf slice(int index, int length) {
-        checkIndex(index, length);
-        return buffer.slice(index, length);
-    }
-
-    @Override
-    public ByteBuf retainedSlice(int index, int length) {
         checkIndex(index, length);
         return buffer.slice(index, length);
     }
@@ -878,7 +757,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuffer nioBuffer() {
-        throw reject();
+        reject();
+        return null;
     }
 
     @Override
@@ -889,7 +769,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuffer[] nioBuffers() {
-        throw reject();
+        reject();
+        return null;
     }
 
     @Override
@@ -912,7 +793,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public String toString(Charset charsetName) {
-        throw reject();
+        reject();
+        return null;
     }
 
     @Override
@@ -948,92 +830,86 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writeBoolean(boolean value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeByte(int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(byte[] src, int srcIndex, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(byte[] src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(ByteBuffer src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(ByteBuf src, int srcIndex, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(ByteBuf src, int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeBytes(ByteBuf src) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public int writeBytes(InputStream in, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public int writeBytes(ScatteringByteChannel in, int length) {
-        throw reject();
-    }
-
-    @Override
-    public int writeBytes(FileChannel in, long position, int length) {
-        throw reject();
+        reject();
+        return 0;
     }
 
     @Override
     public ByteBuf writeInt(int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf writeIntLE(int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeLong(long value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf writeLongLE(long value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeMedium(int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf writeMediumLE(int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeZero(int length) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -1043,42 +919,32 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf writerIndex(int writerIndex) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeShort(int value) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf writeShortLE(int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeChar(int value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeFloat(float value) {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
     public ByteBuf writeDouble(double value) {
-        throw reject();
-    }
-
-    @Override
-    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
-        throw reject();
-    }
-
-    @Override
-    public int writeCharSequence(CharSequence sequence, Charset charset) {
-        throw reject();
+        reject();
+        return this;
     }
 
     private void checkIndex(int index, int length) {
@@ -1095,7 +961,8 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf discardSomeReadBytes() {
-        throw reject();
+        reject();
+        return this;
     }
 
     @Override
@@ -1105,42 +972,35 @@ final class ReplayingDecoderByteBuf extends ByteBuf {
 
     @Override
     public ByteBuf retain() {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf retain(int increment) {
-        throw reject();
-    }
-
-    @Override
-    public ByteBuf touch() {
-        buffer.touch();
+        reject();
         return this;
     }
 
     @Override
-    public ByteBuf touch(Object hint) {
-        buffer.touch(hint);
+    public ByteBuf retain(int increment) {
+        reject();
         return this;
     }
 
     @Override
     public boolean release() {
-        throw reject();
+        reject();
+        return false;
     }
 
     @Override
     public boolean release(int decrement) {
-        throw reject();
+        reject();
+        return false;
     }
 
     @Override
     public ByteBuf unwrap() {
-        throw reject();
+        reject();
+        return this;
     }
 
-    private static UnsupportedOperationException reject() {
-        return new UnsupportedOperationException("not a replayable operation");
+    private static void reject() {
+        throw new UnsupportedOperationException("not a replayable operation");
     }
 }

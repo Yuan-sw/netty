@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -62,7 +62,7 @@ public class DiscardClientHandler extends SimpleChannelInboundHandler<Object> {
     private void generateTraffic() {
         // Flush the outbound buffer to the socket.
         // Once flushed, generate the same amount of traffic again.
-        ctx.writeAndFlush(content.retainedDuplicate()).addListener(trafficGenerator);
+        ctx.writeAndFlush(content.duplicate().retain()).addListener(trafficGenerator);
     }
 
     private final ChannelFutureListener trafficGenerator = new ChannelFutureListener() {

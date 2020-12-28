@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,6 @@
 package io.netty.handler.codec.http.websocketx;
 
 import io.netty.buffer.ByteBuf;
-import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.util.internal.ObjectUtil;
@@ -70,8 +69,6 @@ public final class WebSocketChunkedInput implements ChunkedInput<WebSocketFrame>
     }
 
     /**
-     * @deprecated Use {@link #readChunk(ByteBufAllocator)}.
-     *
      * Fetches a chunked data from the stream. Once this method returns the last chunk
      * and thus the stream has reached at its end, any subsequent {@link #isEndOfInput()}
      * call must return {@code true}.
@@ -79,36 +76,12 @@ public final class WebSocketChunkedInput implements ChunkedInput<WebSocketFrame>
      * @param ctx {@link ChannelHandlerContext} context of channelHandler
      * @return {@link WebSocketFrame} contain chunk of data
      */
-    @Deprecated
     @Override
     public WebSocketFrame readChunk(ChannelHandlerContext ctx) throws Exception {
-        return readChunk(ctx.alloc());
-    }
-
-    /**
-     * Fetches a chunked data from the stream. Once this method returns the last chunk
-     * and thus the stream has reached at its end, any subsequent {@link #isEndOfInput()}
-     * call must return {@code true}.
-     *
-     * @param allocator {@link ByteBufAllocator}
-     * @return {@link WebSocketFrame} contain chunk of data
-     */
-    @Override
-    public WebSocketFrame readChunk(ByteBufAllocator allocator) throws Exception {
-        ByteBuf buf = input.readChunk(allocator);
+        ByteBuf buf = input.readChunk(ctx);
         if (buf == null) {
             return null;
         }
         return new ContinuationWebSocketFrame(input.isEndOfInput(), rsv, buf);
-    }
-
-    @Override
-    public long length() {
-        return input.length();
-    }
-
-    @Override
-    public long progress() {
-        return input.progress();
     }
 }

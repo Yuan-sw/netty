@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -44,20 +44,6 @@ public interface ReferenceCounted {
      * Increases the reference count by the specified {@code increment}.
      */
     ReferenceCounted retain(int increment);
-
-    /**
-     * Records the current access location of this object for debugging purposes.
-     * If this object is determined to be leaked, the information recorded by this operation will be provided to you
-     * via {@link ResourceLeakDetector}.  This method is a shortcut to {@link #touch(Object) touch(null)}.
-     */
-    ReferenceCounted touch();
-
-    /**
-     * Records the current access location of this object with an additional arbitrary information for debugging
-     * purposes.  If this object is determined to be leaked, the information recorded by this operation will be
-     * provided to you via {@link ResourceLeakDetector}.
-     */
-    ReferenceCounted touch(Object hint);
 
     /**
      * Decreases the reference count by {@code 1} and deallocates this object if the reference count reaches at

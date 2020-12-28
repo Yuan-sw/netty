@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -27,7 +27,7 @@ public class DefaultSpdyHeadersFrame extends DefaultSpdyStreamFrame
 
     private boolean invalid;
     private boolean truncated;
-    private final SpdyHeaders headers;
+    private final SpdyHeaders headers = new DefaultSpdyHeaders();
 
     /**
      * Creates a new instance.
@@ -35,18 +35,7 @@ public class DefaultSpdyHeadersFrame extends DefaultSpdyStreamFrame
      * @param streamId the Stream-ID of this frame
      */
     public DefaultSpdyHeadersFrame(int streamId) {
-        this(streamId, true);
-    }
-
-    /**
-     * Creates a new instance.
-     *
-     * @param streamId the Stream-ID of this frame
-     * @param validate validate the header names and values when adding them to the {@link SpdyHeaders}
-     */
-    public DefaultSpdyHeadersFrame(int streamId, boolean validate) {
         super(streamId);
-        headers = new DefaultSpdyHeaders(validate);
     }
 
     @Override
@@ -109,7 +98,7 @@ public class DefaultSpdyHeadersFrame extends DefaultSpdyStreamFrame
     }
 
     protected void appendHeaders(StringBuilder buf) {
-        for (Map.Entry<CharSequence, CharSequence> e: headers()) {
+        for (Map.Entry<String, String> e: headers()) {
             buf.append("    ");
             buf.append(e.getKey());
             buf.append(": ");

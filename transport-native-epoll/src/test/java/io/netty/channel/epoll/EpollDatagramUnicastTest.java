@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,7 +16,6 @@
 package io.netty.channel.epoll;
 
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.socket.InternetProtocolFamily;
 import io.netty.testsuite.transport.TestsuitePermutation;
 import io.netty.testsuite.transport.socket.DatagramUnicastTest;
 
@@ -25,13 +24,6 @@ import java.util.List;
 public class EpollDatagramUnicastTest extends DatagramUnicastTest {
     @Override
     protected List<TestsuitePermutation.BootstrapComboFactory<Bootstrap, Bootstrap>> newFactories() {
-        return EpollSocketTestPermutation.INSTANCE.datagram(InternetProtocolFamily.IPv4);
-    }
-
-    public void testSimpleSendWithConnect(Bootstrap sb, Bootstrap cb) throws Throwable {
-        // Run this test with IP_RECVORIGDSTADDR option enabled
-        sb.option(EpollChannelOption.IP_RECVORIGDSTADDR, true);
-        super.testSimpleSendWithConnect(sb, cb);
-        sb.option(EpollChannelOption.IP_RECVORIGDSTADDR, false);
+        return EpollSocketTestPermutation.INSTANCE.datagram();
     }
 }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -49,8 +49,6 @@ import java.util.Map;
  * <td>{@link ChannelOption#CONNECT_TIMEOUT_MILLIS}</td><td>{@link #setConnectTimeoutMillis(int)}</td>
  * </tr><tr>
  * <td>{@link ChannelOption#WRITE_SPIN_COUNT}</td><td>{@link #setWriteSpinCount(int)}</td>
- * </tr><tr>
- * <td>{@link ChannelOption#WRITE_BUFFER_WATER_MARK}</td><td>{@link #setWriteBufferWaterMark(WriteBufferWaterMark)}</td>
  * </tr><tr>
  * <td>{@link ChannelOption#ALLOCATOR}</td><td>{@link #setAllocator(ByteBufAllocator)}</td>
  * </tr><tr>
@@ -121,24 +119,16 @@ public interface ChannelConfig {
     ChannelConfig setConnectTimeoutMillis(int connectTimeoutMillis);
 
     /**
-     * @deprecated Use {@link MaxMessagesRecvByteBufAllocator} and
-     * {@link MaxMessagesRecvByteBufAllocator#maxMessagesPerRead()}.
-     * <p>
      * Returns the maximum number of messages to read per read loop.
      * a {@link ChannelInboundHandler#channelRead(ChannelHandlerContext, Object) channelRead()} event.
      * If this value is greater than 1, an event loop might attempt to read multiple times to procure multiple messages.
      */
-    @Deprecated
     int getMaxMessagesPerRead();
 
     /**
-     * @deprecated Use {@link MaxMessagesRecvByteBufAllocator} and
-     * {@link MaxMessagesRecvByteBufAllocator#maxMessagesPerRead(int)}.
-     * <p>
      * Sets the maximum number of messages to read per read loop.
      * If this value is greater than 1, an event loop might attempt to read multiple times to procure multiple messages.
      */
-    @Deprecated
     ChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead);
 
     /**
@@ -175,12 +165,14 @@ public interface ChannelConfig {
     ChannelConfig setAllocator(ByteBufAllocator allocator);
 
     /**
-     * Returns {@link RecvByteBufAllocator} which is used for the channel to allocate receive buffers.
+     * Returns {@link RecvByteBufAllocator} which is used for the channel
+     * to allocate receive buffers.
      */
-    <T extends RecvByteBufAllocator> T getRecvByteBufAllocator();
+    RecvByteBufAllocator getRecvByteBufAllocator();
 
     /**
-     * Set the {@link RecvByteBufAllocator} which is used for the channel to allocate receive buffers.
+     * Set the {@link ByteBufAllocator} which is used for the channel
+     * to allocate receive buffers.
      */
     ChannelConfig setRecvByteBufAllocator(RecvByteBufAllocator allocator);
 
@@ -197,15 +189,21 @@ public interface ChannelConfig {
     ChannelConfig setAutoRead(boolean autoRead);
 
     /**
+     * @deprecated  Auto close will be removed in a future release.
+     *
      * Returns {@code true} if and only if the {@link Channel} will be closed automatically and immediately on
-     * write failure. The default is {@code true}.
+     * write failure.  The default is {@code false}.
      */
+    @Deprecated
     boolean isAutoClose();
 
     /**
+     * @deprecated  Auto close will be removed in a future release.
+     *
      * Sets whether the {@link Channel} should be closed automatically and immediately on write failure.
-     * The default is {@code true}.
+     * The default is {@code false}.
      */
+    @Deprecated
     ChannelConfig setAutoClose(boolean autoClose);
 
     /**
@@ -216,7 +214,6 @@ public interface ChannelConfig {
     int getWriteBufferHighWaterMark();
 
     /**
-     * <p>
      * Sets the high water mark of the write buffer.  If the number of bytes
      * queued in the write buffer exceeds this value, {@link Channel#isWritable()}
      * will start to return {@code false}.
@@ -233,7 +230,6 @@ public interface ChannelConfig {
     int getWriteBufferLowWaterMark();
 
     /**
-     * <p>
      * Sets the low water mark of the write buffer.  Once the number of bytes
      * queued in the write buffer exceeded the
      * {@linkplain #setWriteBufferHighWaterMark(int) high water mark} and then
@@ -253,16 +249,4 @@ public interface ChannelConfig {
      * to detect the size of a message.
      */
     ChannelConfig setMessageSizeEstimator(MessageSizeEstimator estimator);
-
-    /**
-     * Returns the {@link WriteBufferWaterMark} which is used for setting the high and low
-     * water mark of the write buffer.
-     */
-    WriteBufferWaterMark getWriteBufferWaterMark();
-
-    /**
-     * Set the {@link WriteBufferWaterMark} which is used for setting the high and low
-     * water mark of the write buffer.
-     */
-    ChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark);
 }

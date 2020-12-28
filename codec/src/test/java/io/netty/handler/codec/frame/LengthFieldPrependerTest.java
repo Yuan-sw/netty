@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,6 +24,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import static io.netty.buffer.Unpooled.*;
+import static org.hamcrest.core.Is.*;
 import java.nio.ByteOrder;
 
 import static org.junit.Assert.*;
@@ -41,13 +42,8 @@ public class LengthFieldPrependerTest {
     public void testPrependLength() throws Exception {
         final EmbeddedChannel ch = new EmbeddedChannel(new LengthFieldPrepender(4));
         ch.writeOutbound(msg);
-        ByteBuf buf = ch.readOutbound();
-        assertEquals(4, buf.readableBytes());
-        assertEquals(msg.readableBytes(), buf.readInt());
-        buf.release();
-
-        buf = ch.readOutbound();
-        assertSame(buf, msg);
+        final ByteBuf buf = (ByteBuf) ch.readOutbound();
+        assertThat(buf, is(wrappedBuffer(new byte[]{0, 0, 0, 1, 'A'})));
         buf.release();
     }
 
@@ -55,13 +51,8 @@ public class LengthFieldPrependerTest {
     public void testPrependLengthIncludesLengthFieldLength() throws Exception {
         final EmbeddedChannel ch = new EmbeddedChannel(new LengthFieldPrepender(4, true));
         ch.writeOutbound(msg);
-        ByteBuf buf = ch.readOutbound();
-        assertEquals(4, buf.readableBytes());
-        assertEquals(5, buf.readInt());
-        buf.release();
-
-        buf = ch.readOutbound();
-        assertSame(buf, msg);
+        final ByteBuf buf = (ByteBuf) ch.readOutbound();
+        assertThat(buf, is(wrappedBuffer(new byte[]{0, 0, 0, 5, 'A'})));
         buf.release();
     }
 
@@ -69,13 +60,8 @@ public class LengthFieldPrependerTest {
     public void testPrependAdjustedLength() throws Exception {
         final EmbeddedChannel ch = new EmbeddedChannel(new LengthFieldPrepender(4, -1));
         ch.writeOutbound(msg);
-        ByteBuf buf = ch.readOutbound();
-        assertEquals(4, buf.readableBytes());
-        assertEquals(msg.readableBytes() - 1, buf.readInt());
-        buf.release();
-
-        buf = ch.readOutbound();
-        assertSame(buf, msg);
+        final ByteBuf buf = (ByteBuf) ch.readOutbound();
+        assertThat(buf, is(wrappedBuffer(new byte[]{0, 0, 0, 0, 'A'})));
         buf.release();
     }
 
@@ -94,18 +80,15 @@ public class LengthFieldPrependerTest {
     public void testPrependLengthInLittleEndian() throws Exception {
         final EmbeddedChannel ch = new EmbeddedChannel(new LengthFieldPrepender(ByteOrder.LITTLE_ENDIAN, 4, 0, false));
         ch.writeOutbound(msg);
-        ByteBuf buf = ch.readOutbound();
-        assertEquals(4, buf.readableBytes());
+        ByteBuf buf = (ByteBuf) ch.readOutbound();
+        assertEquals(5, buf.readableBytes());
         byte[] writtenBytes = new byte[buf.readableBytes()];
         buf.getBytes(0, writtenBytes);
         assertEquals(1, writtenBytes[0]);
         assertEquals(0, writtenBytes[1]);
         assertEquals(0, writtenBytes[2]);
         assertEquals(0, writtenBytes[3]);
-        buf.release();
-
-        buf = ch.readOutbound();
-        assertSame(buf, msg);
+        assertEquals('A', writtenBytes[4]);
         buf.release();
         assertFalse("The channel must have been completely read", ch.finish());
     }

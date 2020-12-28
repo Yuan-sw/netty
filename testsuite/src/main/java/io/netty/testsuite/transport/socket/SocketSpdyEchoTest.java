@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -28,9 +28,11 @@ import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.spdy.SpdyFrameCodec;
 import io.netty.handler.codec.spdy.SpdyVersion;
+import io.netty.util.NetUtil;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -193,6 +195,7 @@ public class SocketSpdyEchoTest extends AbstractSocketTest {
         cb.handler(ch);
 
         Channel sc = sb.bind().sync().channel();
+        int port = ((InetSocketAddress) sc.localAddress()).getPort();
 
         Channel cc = cb.connect(sc.localAddress()).sync().channel();
         cc.writeAndFlush(frames);

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,6 @@ import com.sun.nio.sctp.Association;
 import com.sun.nio.sctp.MessageInfo;
 import com.sun.nio.sctp.NotificationHandler;
 import com.sun.nio.sctp.SctpChannel;
-
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelException;
@@ -58,10 +57,7 @@ import java.util.Set;
  *
  * Be aware that not all operations systems support SCTP. Please refer to the documentation of your operation system,
  * to understand what you need to do to use it. Also this feature is only supported on Java 7+.
- *
- * @deprecated use {@link io.netty.channel.sctp.nio.NioSctpChannel}.
  */
-@Deprecated
 public class OioSctpChannel extends AbstractOioMessageChannel
         implements io.netty.channel.sctp.SctpChannel {
 
@@ -79,6 +75,8 @@ public class OioSctpChannel extends AbstractOioMessageChannel
     private final Selector connectSelector;
 
     private final NotificationHandler<?> notificationHandler;
+
+    private RecvByteBufAllocator.Handle allocHandle;
 
     private static SctpChannel openChannel() {
         try {
@@ -185,13 +183,19 @@ public class OioSctpChannel extends AbstractOioMessageChannel
         if (!keysSelected) {
             return readMessages;
         }
+
         // We must clear the selectedKeys because the Selector will never do it. If we do not clear it, the selectionKey
         // will always be returned even if there is no data can be read which causes performance issue. And in some
         // implementation of Selector, the select method may return 0 if the selectionKey which is ready for process has
         // already been in the selectedKeys and cause the keysSelected above to be false even if we actually have
         // something to read.
         readSelector.selectedKeys().clear();
-        final RecvByteBufAllocator.Handle allocHandle = unsafe().recvBufAllocHandle();
+
+        RecvByteBufAllocator.Handle allocHandle = this.allocHandle;
+        if (allocHandle == null) {
+            this.allocHandle = allocHandle = config().getRecvByteBufAllocator().newHandle();
+        }
+
         ByteBuf buffer = allocHandle.allocate(config().getAllocator());
         boolean free = true;
 
@@ -203,14 +207,14 @@ public class OioSctpChannel extends AbstractOioMessageChannel
             }
 
             data.flip();
-            allocHandle.lastBytesRead(data.remaining());
-            msgs.add(new SctpMessage(messageInfo,
-                    buffer.writerIndex(buffer.writerIndex() + allocHandle.lastBytesRead())));
+            msgs.add(new SctpMessage(messageInfo, buffer.writerIndex(buffer.writerIndex() + data.remaining())));
             free = false;
-            ++readMessages;
+            readMessages ++;
         } catch (Throwable cause) {
             PlatformDependent.throwException(cause);
         }  finally {
+            int bytesRead = buffer.readableBytes();
+            allocHandle.record(bytesRead);
             if (free) {
                 buffer.release();
             }
@@ -405,9 +409,7 @@ public class OioSctpChannel extends AbstractOioMessageChannel
         try {
             selector.close();
         } catch (IOException e) {
-            if (logger.isWarnEnabled()) {
-                logger.warn("Failed to close a " + selectorName + " selector.", e);
-            }
+            logger.warn("Failed to close a " + selectorName + " selector.", e);
         }
     }
 
@@ -468,7 +470,7 @@ public class OioSctpChannel extends AbstractOioMessageChannel
 
         @Override
         protected void autoReadCleared() {
-            clearReadPending();
+            setReadPending(false);
         }
     }
 }

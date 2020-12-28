@@ -3,7 +3,7 @@
  * The Netty Project licenses this file to you under the Apache License,
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
- * https://www.apache.org/licenses/LICENSE-2.0
+ * http://www.apache.org/licenses/LICENSE-2.0
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
  * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
@@ -273,8 +273,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
      *            ensure correct testing)
      * @throws Throwable
      */
-    private static void testTrafficShapping0(
-            ServerBootstrap sb, Bootstrap cb, final boolean additionalExecutor,
+    private static void testTrafficShapping0(ServerBootstrap sb, Bootstrap cb, final boolean additionalExecutor,
             final boolean limitRead, final boolean limitWrite, final boolean globalLimit, int[] autoRead,
             long[] minimalWaitBetween, int[] multipleMessage) throws Throwable {
 
@@ -285,7 +284,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         final ServerHandler sh = new ServerHandler(autoRead, multipleMessage);
         Promise<Boolean> promise = group.next().newPromise();
         final ClientHandler ch = new ClientHandler(promise, minimalWaitBetween, multipleMessage,
-                                                   autoRead);
+                autoRead);
 
         final AbstractTrafficShapingHandler handler;
         if (limitRead) {
@@ -354,13 +353,13 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
 
         if (autoRead == null && minimalWaitBetween != null) {
             assertTrue("Overall Traffic not ok since > " + maxfactor + ": " + average,
-                       average <= maxfactor);
+                    average <= maxfactor);
             if (additionalExecutor) {
                 // Oio is not as good when using additionalExecutor
                 assertTrue("Overall Traffic not ok since < 0.25: " + average, average >= 0.25);
             } else {
                 assertTrue("Overall Traffic not ok since < " + minfactor + ": " + average,
-                           average >= minfactor);
+                        average >= minfactor);
             }
         }
         if (handler != null && globalLimit) {
@@ -393,7 +392,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
         final Promise<Boolean> promise;
 
         ClientHandler(Promise<Boolean> promise, long[] minimalWaitBetween, int[] multipleMessage,
-                      int[] autoRead) {
+                int[] autoRead) {
             this.minimalWaitBetween = minimalWaitBetween;
             this.multipleMessage = Arrays.copyOf(multipleMessage, multipleMessage.length);
             this.promise = promise;
@@ -427,7 +426,7 @@ public class TrafficShapingHandlerTest extends AbstractSocketTest {
             loggerClient.info("Step: " + step + " Interval: " + (lastTimestamp - currentLastTime) + " compareTo "
                               + minimalWait + " (" + ar + ')');
             assertTrue("The interval of time is incorrect:" + (lastTimestamp - currentLastTime) + " not> "
-                       + minimalWait, lastTimestamp - currentLastTime >= minimalWait);
+                    + minimalWait, lastTimestamp - currentLastTime >= minimalWait);
             currentLastTime = lastTimestamp;
             step++;
             if (multipleMessage.length > step) {

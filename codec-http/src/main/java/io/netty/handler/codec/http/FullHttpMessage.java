@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.handler.codec.http;
-
-import io.netty.buffer.ByteBuf;
 
 /**
  * Combines {@link HttpMessage} and {@link LastHttpContent} into one
@@ -26,23 +24,8 @@ public interface FullHttpMessage extends HttpMessage, LastHttpContent {
     FullHttpMessage copy();
 
     @Override
-    FullHttpMessage duplicate();
-
-    @Override
-    FullHttpMessage retainedDuplicate();
-
-    @Override
-    FullHttpMessage replace(ByteBuf content);
-
-    @Override
     FullHttpMessage retain(int increment);
 
     @Override
     FullHttpMessage retain();
-
-    @Override
-    FullHttpMessage touch();
-
-    @Override
-    FullHttpMessage touch(Object hint);
 }

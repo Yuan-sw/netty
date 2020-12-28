@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,6 +17,7 @@ package io.netty.microbench.buffer;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.ByteBufUtil;
+import io.netty.buffer.SlicedByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.microbench.util.AbstractMicrobenchmark;
 import org.openjdk.jmh.annotations.Benchmark;
@@ -41,7 +42,7 @@ public class SlicedByteBufBenchmark extends AbstractMicrobenchmark {
     public void setup() {
         // Use buffer sizes that will also allow to write UTF-8 without grow the buffer
         ByteBuf buffer = Unpooled.buffer(512).retain();
-        slicedByteBuf = buffer.slice(0, 256);
+        slicedByteBuf = new SlicedByteBuf(buffer, 0, 256);
         slicedAbstractByteBuf = buffer.slice(0, 256);
 
         if (slicedByteBuf.getClass() == slicedAbstractByteBuf.getClass()) {

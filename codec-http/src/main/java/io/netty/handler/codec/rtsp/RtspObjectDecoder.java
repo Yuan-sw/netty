@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,8 +19,6 @@ import io.netty.buffer.ByteBuf;
 import io.netty.handler.codec.TooLongFrameException;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpObjectDecoder;
-
-import static io.netty.handler.codec.rtsp.RtspDecoder.DEFAULT_MAX_CONTENT_LENGTH;
 
 /**
  * Decodes {@link ByteBuf}s into RTSP messages represented in
@@ -61,7 +59,7 @@ public abstract class RtspObjectDecoder extends HttpObjectDecoder {
      * {@code maxContentLength (8192)}.
      */
     protected RtspObjectDecoder() {
-        this(DEFAULT_MAX_INITIAL_LINE_LENGTH, DEFAULT_MAX_HEADER_SIZE, DEFAULT_MAX_CONTENT_LENGTH);
+        this(4096, 8192, 8192);
     }
 
     /**
@@ -84,7 +82,7 @@ public abstract class RtspObjectDecoder extends HttpObjectDecoder {
         if (empty) {
             return true;
         }
-        if (!msg.headers().contains(RtspHeaderNames.CONTENT_LENGTH)) {
+        if (!msg.headers().contains(RtspHeaders.Names.CONTENT_LENGTH)) {
             return true;
         }
         return empty;

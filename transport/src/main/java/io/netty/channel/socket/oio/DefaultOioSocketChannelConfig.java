@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,9 +19,7 @@ import io.netty.buffer.ByteBufAllocator;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.MessageSizeEstimator;
-import io.netty.channel.PreferHeapByteBufAllocator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.DefaultSocketChannelConfig;
 import io.netty.channel.socket.SocketChannel;
 
@@ -33,20 +31,15 @@ import static io.netty.channel.ChannelOption.*;
 
 /**
  * Default {@link OioSocketChannelConfig} implementation
- *
- * @deprecated use NIO / EPOLL / KQUEUE transport.
  */
-@Deprecated
 public class DefaultOioSocketChannelConfig extends DefaultSocketChannelConfig implements OioSocketChannelConfig {
     @Deprecated
     public DefaultOioSocketChannelConfig(SocketChannel channel, Socket javaSocket) {
         super(channel, javaSocket);
-        setAllocator(new PreferHeapByteBufAllocator(getAllocator()));
     }
 
     DefaultOioSocketChannelConfig(OioSocketChannel channel, Socket javaSocket) {
         super(channel, javaSocket);
-        setAllocator(new PreferHeapByteBufAllocator(getAllocator()));
     }
 
     @Override
@@ -156,7 +149,6 @@ public class DefaultOioSocketChannelConfig extends DefaultSocketChannelConfig im
     }
 
     @Override
-    @Deprecated
     public OioSocketChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead) {
         super.setMaxMessagesPerRead(maxMessagesPerRead);
         return this;
@@ -189,7 +181,7 @@ public class DefaultOioSocketChannelConfig extends DefaultSocketChannelConfig im
     @Override
     protected void autoReadCleared() {
         if (channel instanceof OioSocketChannel) {
-            ((OioSocketChannel) channel).clearReadPending0();
+            ((OioSocketChannel) channel).setReadPending(false);
         }
     }
 
@@ -208,12 +200,6 @@ public class DefaultOioSocketChannelConfig extends DefaultSocketChannelConfig im
     @Override
     public OioSocketChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
         super.setWriteBufferLowWaterMark(writeBufferLowWaterMark);
-        return this;
-    }
-
-    @Override
-    public OioSocketChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark) {
-        super.setWriteBufferWaterMark(writeBufferWaterMark);
         return this;
     }
 

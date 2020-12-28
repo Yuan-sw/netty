@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,10 +20,8 @@ import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelOutboundHandler;
-import io.netty.channel.ChannelOutboundInvoker;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.ChannelPromise;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.concurrent.Future;
 
@@ -31,8 +29,8 @@ import java.util.concurrent.Future;
  * {@link ChannelDuplexHandler} which consolidates {@link Channel#flush()} / {@link ChannelHandlerContext#flush()}
  * operations (which also includes
  * {@link Channel#writeAndFlush(Object)} / {@link Channel#writeAndFlush(Object, ChannelPromise)} and
- * {@link ChannelOutboundInvoker#writeAndFlush(Object)} /
- * {@link ChannelOutboundInvoker#writeAndFlush(Object, ChannelPromise)}).
+ * {@link ChannelHandlerContext#writeAndFlush(Object)} /
+ * {@link ChannelHandlerContext#writeAndFlush(Object, ChannelPromise)}).
  * <p>
  * Flush operations are generally speaking expensive as these may trigger a syscall on the transport level. Thus it is
  * in most cases (where write latency can be traded with throughput) a good idea to try to minimize flush operations
@@ -48,8 +46,8 @@ import java.util.concurrent.Future;
  *     high throughput, this gives the opportunity to process other flushes before the task gets executed, thus
  *     batching multiple flushes into one.</li>
  * </ul>
- * If {@code explicitFlushAfterFlushes} is reached the flush will be forwarded as well (whether while in a read loop, or
- * while batching outside of a read loop).
+ * If {@code explicitFlushAfterFlushes} is reached the flush will also be forwarded as well (whether while in a read
+ * loop, or while batching outside of a read loop).
  * <p>
  * If the {@link Channel} becomes non-writable it will also try to execute any pending flush operations.
  * <p>
@@ -66,17 +64,10 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
     private Future<?> nextScheduledFlush;
 
     /**
-     * The default number of flushes after which a flush will be forwarded to downstream handlers (whether while in a
-     * read loop, or while batching outside of a read loop).
-     */
-    public static final int DEFAULT_EXPLICIT_FLUSH_AFTER_FLUSHES = 256;
-
-    /**
-     * Create new instance which explicit flush after {@value DEFAULT_EXPLICIT_FLUSH_AFTER_FLUSHES} pending flush
-     * operations at the latest.
+     * Create new instance which explicit flush after 256 pending flush operations latest.
      */
     public FlushConsolidationHandler() {
-        this(DEFAULT_EXPLICIT_FLUSH_AFTER_FLUSHES, false);
+        this(256, false);
     }
 
     /**
@@ -96,8 +87,11 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
      *                                        ongoing.
      */
     public FlushConsolidationHandler(int explicitFlushAfterFlushes, boolean consolidateWhenNoReadInProgress) {
-        this.explicitFlushAfterFlushes =
-                ObjectUtil.checkPositive(explicitFlushAfterFlushes, "explicitFlushAfterFlushes");
+        if (explicitFlushAfterFlushes <= 0) {
+            throw new IllegalArgumentException("explicitFlushAfterFlushes: "
+                    + explicitFlushAfterFlushes + " (expected: > 0)");
+        }
+        this.explicitFlushAfterFlushes = explicitFlushAfterFlushes;
         this.consolidateWhenNoReadInProgress = consolidateWhenNoReadInProgress;
         this.flushTask = consolidateWhenNoReadInProgress ?
                 new Runnable() {
@@ -105,8 +99,8 @@ public class FlushConsolidationHandler extends ChannelDuplexHandler {
                     public void run() {
                         if (flushPendingCount > 0 && !readInProgress) {
                             flushPendingCount = 0;
-                            nextScheduledFlush = null;
                             ctx.flush();
+                            nextScheduledFlush = null;
                         } // else we'll flush when the read completes
                     }
                 }

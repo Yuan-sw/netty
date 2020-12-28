@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -201,22 +201,12 @@ public final class PemX509Certificate extends X509Certificate implements PemEnco
 
     @Override
     public PemX509Certificate copy() {
-        return replace(content.copy());
+        return new PemX509Certificate(content.copy());
     }
 
     @Override
     public PemX509Certificate duplicate() {
-        return replace(content.duplicate());
-    }
-
-    @Override
-    public PemX509Certificate retainedDuplicate() {
-        return replace(content.retainedDuplicate());
-    }
-
-    @Override
-    public PemX509Certificate replace(ByteBuf content) {
-        return new PemX509Certificate(content);
+        return new PemX509Certificate(content.duplicate());
     }
 
     @Override
@@ -228,18 +218,6 @@ public final class PemX509Certificate extends X509Certificate implements PemEnco
     @Override
     public PemX509Certificate retain(int increment) {
         content.retain(increment);
-        return this;
-    }
-
-    @Override
-    public PemX509Certificate touch() {
-        content.touch();
-        return this;
-    }
-
-    @Override
-    public PemX509Certificate touch(Object hint) {
-        content.touch(hint);
         return this;
     }
 

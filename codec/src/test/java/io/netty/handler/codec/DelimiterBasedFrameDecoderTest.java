@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -34,10 +34,10 @@ public class DelimiterBasedFrameDecoderTest {
                 Delimiters.lineDelimiter()));
         ch.writeInbound(Unpooled.copiedBuffer("TestLine\r\ng\r\n", Charset.defaultCharset()));
 
-        ByteBuf buf = ch.readInbound();
+        ByteBuf buf = (ByteBuf) ch.readInbound();
         assertEquals("TestLine", buf.toString(Charset.defaultCharset()));
 
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals("g", buf2.toString(Charset.defaultCharset()));
         assertNull(ch.readInbound());
         ch.finish();
@@ -54,10 +54,10 @@ public class DelimiterBasedFrameDecoderTest {
         assertNull(ch.readInbound());
         ch.writeInbound(Unpooled.copiedBuffer("Line\r\ng\r\n", Charset.defaultCharset()));
 
-        ByteBuf buf = ch.readInbound();
+        ByteBuf buf = (ByteBuf) ch.readInbound();
         assertEquals("TestLine", buf.toString(Charset.defaultCharset()));
 
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals("g", buf2.toString(Charset.defaultCharset()));
         assertNull(ch.readInbound());
         ch.finish();
@@ -72,10 +72,10 @@ public class DelimiterBasedFrameDecoderTest {
                 Delimiters.lineDelimiter()));
         ch.writeInbound(Unpooled.copiedBuffer("TestLine\r\ng\r\n", Charset.defaultCharset()));
 
-        ByteBuf buf = ch.readInbound();
+        ByteBuf buf = (ByteBuf) ch.readInbound();
         assertEquals("TestLine\r\n", buf.toString(Charset.defaultCharset()));
 
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals("g\r\n", buf2.toString(Charset.defaultCharset()));
         assertNull(ch.readInbound());
         ch.finish();
@@ -92,10 +92,10 @@ public class DelimiterBasedFrameDecoderTest {
         assertNull(ch.readInbound());
         ch.writeInbound(Unpooled.copiedBuffer("Line\r\ng\r\n", Charset.defaultCharset()));
 
-        ByteBuf buf = ch.readInbound();
+        ByteBuf buf = (ByteBuf) ch.readInbound();
         assertEquals("TestLine\r\n", buf.toString(Charset.defaultCharset()));
 
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals("g\r\n", buf2.toString(Charset.defaultCharset()));
         assertNull(ch.readInbound());
         ch.finish();
@@ -111,10 +111,10 @@ public class DelimiterBasedFrameDecoderTest {
 
         ch.writeInbound(Unpooled.copiedBuffer("first\r\nsecond\nthird", CharsetUtil.US_ASCII));
 
-        ByteBuf buf = ch.readInbound();
+        ByteBuf buf = (ByteBuf) ch.readInbound();
         assertEquals("first", buf.toString(CharsetUtil.US_ASCII));
 
-        ByteBuf buf2 = ch.readInbound();
+        ByteBuf buf2 = (ByteBuf) ch.readInbound();
         assertEquals("second", buf2.toString(CharsetUtil.US_ASCII));
         assertNull(ch.readInbound());
         ch.finish();

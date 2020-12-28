@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,19 +17,16 @@ package io.netty.handler.codec.http.cookie;
 
 import static io.netty.util.internal.ObjectUtil.checkNotNull;
 
-import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
-import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
 /**
- * A <a href="https://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used server side.
+ * A <a href="http://tools.ietf.org/html/rfc6265">RFC6265</a> compliant cookie decoder to be used server side.
  *
  * Only name and value fields are expected, so old fields are not populated (path, domain, etc).
  *
- * Old <a href="https://tools.ietf.org/html/rfc2965">RFC2965</a> cookies are still supported,
+ * Old <a href="http://tools.ietf.org/html/rfc2965">RFC2965</a> cookies are still supported,
  * old fields will simply be ignored.
  *
  * @see ServerCookieEncoder
@@ -60,39 +57,18 @@ public final class ServerCookieDecoder extends CookieDecoder {
     }
 
     /**
-     * Decodes the specified Set-Cookie HTTP header value into a {@link Cookie}.  Unlike {@link #decode(String)}, this
-     * includes all cookie values present, even if they have the same name.
-     *
-     * @return the decoded {@link Cookie}
-     */
-    public List<Cookie> decodeAll(String header) {
-        List<Cookie> cookies = new ArrayList<Cookie>();
-        decode(cookies, header);
-        return Collections.unmodifiableList(cookies);
-    }
-
-    /**
      * Decodes the specified Set-Cookie HTTP header value into a {@link Cookie}.
      *
      * @return the decoded {@link Cookie}
      */
     public Set<Cookie> decode(String header) {
-        Set<Cookie> cookies = new TreeSet<Cookie>();
-        decode(cookies, header);
-        return cookies;
-    }
-
-    /**
-     * Decodes the specified Set-Cookie HTTP header value into a {@link Cookie}.
-     *
-     * @return the decoded {@link Cookie}
-     */
-    private void decode(Collection<? super Cookie> cookies, String header) {
         final int headerLen = checkNotNull(header, "header").length();
 
         if (headerLen == 0) {
-            return;
+            return Collections.emptySet();
         }
+
+        Set<Cookie> cookies = new TreeSet<Cookie>();
 
         int i = 0;
 
@@ -120,43 +96,45 @@ public final class ServerCookieDecoder extends CookieDecoder {
             }
 
             int nameBegin = i;
-            int nameEnd;
-            int valueBegin;
-            int valueEnd;
+            int nameEnd = i;
+            int valueBegin = -1;
+            int valueEnd = -1;
 
-            for (;;) {
+            if (i != headerLen) {
+                keyValLoop: for (;;) {
 
-                char curChar = header.charAt(i);
-                if (curChar == ';') {
-                    // NAME; (no value till ';')
-                    nameEnd = i;
-                    valueBegin = valueEnd = -1;
-                    break;
+                    char curChar = header.charAt(i);
+                    if (curChar == ';') {
+                        // NAME; (no value till ';')
+                        nameEnd = i;
+                        valueBegin = valueEnd = -1;
+                        break keyValLoop;
 
-                } else if (curChar == '=') {
-                    // NAME=VALUE
-                    nameEnd = i;
-                    i++;
-                    if (i == headerLen) {
-                        // NAME= (empty value, i.e. nothing after '=')
-                        valueBegin = valueEnd = 0;
-                        break;
+                    } else if (curChar == '=') {
+                        // NAME=VALUE
+                        nameEnd = i;
+                        i++;
+                        if (i == headerLen) {
+                            // NAME= (empty value, i.e. nothing after '=')
+                            valueBegin = valueEnd = 0;
+                            break keyValLoop;
+                        }
+
+                        valueBegin = i;
+                        // NAME=VALUE;
+                        int semiPos = header.indexOf(';', i);
+                        valueEnd = i = semiPos > 0 ? semiPos : headerLen;
+                        break keyValLoop;
+                    } else {
+                        i++;
                     }
 
-                    valueBegin = i;
-                    // NAME=VALUE;
-                    int semiPos = header.indexOf(';', i);
-                    valueEnd = i = semiPos > 0 ? semiPos : headerLen;
-                    break;
-                } else {
-                    i++;
-                }
-
-                if (i == headerLen) {
-                    // NAME (no value till the end of string)
-                    nameEnd = headerLen;
-                    valueBegin = valueEnd = -1;
-                    break;
+                    if (i == headerLen) {
+                        // NAME (no value till the end of string)
+                        nameEnd = headerLen;
+                        valueBegin = valueEnd = -1;
+                        break;
+                    }
                 }
             }
 
@@ -173,5 +151,7 @@ public final class ServerCookieDecoder extends CookieDecoder {
                 cookies.add(cookie);
             }
         }
+
+        return cookies;
     }
 }

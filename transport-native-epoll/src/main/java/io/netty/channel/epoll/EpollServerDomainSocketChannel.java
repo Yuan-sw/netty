@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,6 +17,7 @@ package io.netty.channel.epoll;
 
 import io.netty.channel.Channel;
 import io.netty.channel.unix.DomainSocketAddress;
+import io.netty.channel.unix.FileDescriptor;
 import io.netty.channel.unix.ServerDomainSocketChannel;
 import io.netty.channel.unix.Socket;
 import io.netty.util.internal.logging.InternalLogger;
@@ -25,7 +26,8 @@ import io.netty.util.internal.logging.InternalLoggerFactory;
 import java.io.File;
 import java.net.SocketAddress;
 
-import static io.netty.channel.epoll.LinuxSocket.newSocketDomain;
+import static io.netty.channel.unix.Socket.newSocketDomain;
+
 
 public final class EpollServerDomainSocketChannel extends AbstractEpollServerChannel
         implements ServerDomainSocketChannel {
@@ -39,15 +41,22 @@ public final class EpollServerDomainSocketChannel extends AbstractEpollServerCha
         super(newSocketDomain(), false);
     }
 
-    public EpollServerDomainSocketChannel(int fd) {
+    /**
+     * @deprecated Use {@link #EpollServerDomainSocketChannel(Socket, boolean)}.
+     * Creates a new {@link EpollServerDomainSocketChannel} from an existing {@link FileDescriptor}.
+     */
+    public EpollServerDomainSocketChannel(FileDescriptor fd) {
         super(fd);
     }
 
-    EpollServerDomainSocketChannel(LinuxSocket fd) {
+    /**
+     * @deprecated Use {@link #EpollServerDomainSocketChannel(Socket, boolean)}.
+     */
+    public EpollServerDomainSocketChannel(Socket fd) {
         super(fd);
     }
 
-    EpollServerDomainSocketChannel(LinuxSocket fd, boolean active) {
+    public EpollServerDomainSocketChannel(Socket fd, boolean active) {
         super(fd, active);
     }
 
@@ -63,8 +72,8 @@ public final class EpollServerDomainSocketChannel extends AbstractEpollServerCha
 
     @Override
     protected void doBind(SocketAddress localAddress) throws Exception {
-        socket.bind(localAddress);
-        socket.listen(config.getBacklog());
+        fd().bind(localAddress);
+        fd().listen(config.getBacklog());
         local = (DomainSocketAddress) localAddress;
         active = true;
     }

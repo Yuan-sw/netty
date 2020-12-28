@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -58,13 +58,13 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import javax.net.ssl.SSLEngine;
 
-import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.anyOf;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.sameInstance;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThat;
 
 @RunWith(Parameterized.class)
 public class SocketSslEchoTest extends AbstractSocketTest {
@@ -123,33 +123,17 @@ public class SocketSslEchoTest extends AbstractSocketTest {
             "autoRead = {5}, useChunkedWriteHandler = {6}, useCompositeByteBuf = {7}")
     public static Collection<Object[]> data() throws Exception {
         List<SslContext> serverContexts = new ArrayList<SslContext>();
-        serverContexts.add(SslContextBuilder.forServer(CERT_FILE, KEY_FILE)
-                                            .sslProvider(SslProvider.JDK)
-                                            // As we test renegotiation we should use a protocol that support it.
-                                            .protocols("TLSv1.2")
-                                            .build());
+        serverContexts.add(SslContextBuilder.forServer(CERT_FILE, KEY_FILE).sslProvider(SslProvider.JDK).build());
 
         List<SslContext> clientContexts = new ArrayList<SslContext>();
-        clientContexts.add(SslContextBuilder.forClient()
-                                            .sslProvider(SslProvider.JDK)
-                                            .trustManager(CERT_FILE)
-                                            // As we test renegotiation we should use a protocol that support it.
-                                            .protocols("TLSv1.2")
-                                            .build());
+        clientContexts.add(SslContextBuilder.forClient().sslProvider(SslProvider.JDK).trustManager(CERT_FILE).build());
 
         boolean hasOpenSsl = OpenSsl.isAvailable();
         if (hasOpenSsl) {
             serverContexts.add(SslContextBuilder.forServer(CERT_FILE, KEY_FILE)
-                                                .sslProvider(SslProvider.OPENSSL)
-                                                // As we test renegotiation we should use a protocol that support it.
-                                                .protocols("TLSv1.2")
-                                                .build());
-            clientContexts.add(SslContextBuilder.forClient()
-                                                .sslProvider(SslProvider.OPENSSL)
-                                                .trustManager(CERT_FILE)
-                                                // As we test renegotiation we should use a protocol that support it.
-                                                .protocols("TLSv1.2")
-                                                .build());
+                                                .sslProvider(SslProvider.OPENSSL).build());
+            clientContexts.add(SslContextBuilder.forClient().sslProvider(SslProvider.OPENSSL)
+                                                .trustManager(CERT_FILE).build());
         } else {
             logger.warn("OpenSSL is unavailable and thus will not be tested.", OpenSsl.unavailabilityCause());
         }

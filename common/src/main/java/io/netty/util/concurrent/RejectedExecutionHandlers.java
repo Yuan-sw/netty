@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.util.concurrent;
-
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -47,7 +45,9 @@ public final class RejectedExecutionHandlers {
      * {@link EventExecutor#inEventLoop()} returns {@code false}.
      */
     public static RejectedExecutionHandler backoff(final int retries, long backoffAmount, TimeUnit unit) {
-        ObjectUtil.checkPositive(retries, "retries");
+        if (retries <= 0) {
+            throw new IllegalArgumentException(retries + ": " + retries + " (expected: > 0)");
+        }
         final long backOffNanos = unit.toNanos(backoffAmount);
         return new RejectedExecutionHandler() {
             @Override

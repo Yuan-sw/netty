@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.handler.codec.socks;
-
-import io.netty.util.internal.ObjectUtil;
 
 /**
  * An abstract class that defines a SocksRequest, providing common properties for
@@ -31,7 +29,10 @@ public abstract class SocksRequest extends SocksMessage {
 
     protected SocksRequest(SocksRequestType requestType) {
         super(SocksMessageType.REQUEST);
-        this.requestType = ObjectUtil.checkNotNull(requestType, "requestType");
+        if (requestType == null) {
+            throw new NullPointerException("requestType");
+        }
+        this.requestType = requestType;
     }
 
     /**

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,8 @@ import io.netty.util.internal.StringUtil;
 /**
  * The default {@link SpdySynReplyFrame} implementation.
  */
-public class DefaultSpdySynReplyFrame extends DefaultSpdyHeadersFrame implements SpdySynReplyFrame {
+public class DefaultSpdySynReplyFrame extends DefaultSpdyHeadersFrame
+        implements SpdySynReplyFrame {
 
     /**
      * Creates a new instance.
@@ -29,16 +30,6 @@ public class DefaultSpdySynReplyFrame extends DefaultSpdyHeadersFrame implements
      */
     public DefaultSpdySynReplyFrame(int streamId) {
         super(streamId);
-    }
-
-    /**
-     * Creates a new instance.
-     *
-     * @param streamId        the Stream-ID of this frame
-     * @param validateHeaders validate the header names and values when adding them to the {@link SpdyHeaders}
-     */
-    public DefaultSpdySynReplyFrame(int streamId, boolean validateHeaders) {
-        super(streamId, validateHeaders);
     }
 
     @Override

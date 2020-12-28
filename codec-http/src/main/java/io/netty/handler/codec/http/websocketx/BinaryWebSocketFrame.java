@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -19,7 +19,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 
 /**
- * Web Socket frame containing binary data.
+ * Web Socket frame containing binary data
  */
 public class BinaryWebSocketFrame extends WebSocketFrame {
 
@@ -56,22 +56,12 @@ public class BinaryWebSocketFrame extends WebSocketFrame {
 
     @Override
     public BinaryWebSocketFrame copy() {
-        return (BinaryWebSocketFrame) super.copy();
+        return new BinaryWebSocketFrame(isFinalFragment(), rsv(), content().copy());
     }
 
     @Override
     public BinaryWebSocketFrame duplicate() {
-        return (BinaryWebSocketFrame) super.duplicate();
-    }
-
-    @Override
-    public BinaryWebSocketFrame retainedDuplicate() {
-        return (BinaryWebSocketFrame) super.retainedDuplicate();
-    }
-
-    @Override
-    public BinaryWebSocketFrame replace(ByteBuf content) {
-        return new BinaryWebSocketFrame(isFinalFragment(), rsv(), content);
+        return new BinaryWebSocketFrame(isFinalFragment(), rsv(), content().duplicate());
     }
 
     @Override
@@ -83,18 +73,6 @@ public class BinaryWebSocketFrame extends WebSocketFrame {
     @Override
     public BinaryWebSocketFrame retain(int increment) {
         super.retain(increment);
-        return this;
-    }
-
-    @Override
-    public BinaryWebSocketFrame touch() {
-        super.touch();
-        return this;
-    }
-
-    @Override
-    public BinaryWebSocketFrame touch(Object hint) {
-        super.touch(hint);
         return this;
     }
 }

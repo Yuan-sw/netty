@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -21,19 +21,16 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.MessageSizeEstimator;
 import io.netty.channel.RecvByteBufAllocator;
-import io.netty.channel.WriteBufferWaterMark;
-import io.netty.util.internal.ObjectUtil;
 
 import java.io.IOException;
 import java.util.Map;
 
-import static io.netty.channel.unix.Limits.SSIZE_MAX;
-
 public class EpollChannelConfig extends DefaultChannelConfig {
-    private volatile long maxBytesPerGatheringWrite = SSIZE_MAX;
+    final AbstractEpollChannel channel;
 
     EpollChannelConfig(AbstractEpollChannel channel) {
         super(channel);
+        this.channel = channel;
     }
 
     @Override
@@ -68,7 +65,6 @@ public class EpollChannelConfig extends DefaultChannelConfig {
     }
 
     @Override
-    @Deprecated
     public EpollChannelConfig setMaxMessagesPerRead(int maxMessagesPerRead) {
         super.setMaxMessagesPerRead(maxMessagesPerRead);
         return this;
@@ -88,10 +84,6 @@ public class EpollChannelConfig extends DefaultChannelConfig {
 
     @Override
     public EpollChannelConfig setRecvByteBufAllocator(RecvByteBufAllocator allocator) {
-        if (!(allocator.newHandle() instanceof RecvByteBufAllocator.ExtendedHandle)) {
-            throw new IllegalArgumentException("allocator.newHandle() must return an object of type: " +
-                    RecvByteBufAllocator.ExtendedHandle.class);
-        }
         super.setRecvByteBufAllocator(allocator);
         return this;
     }
@@ -103,22 +95,14 @@ public class EpollChannelConfig extends DefaultChannelConfig {
     }
 
     @Override
-    @Deprecated
     public EpollChannelConfig setWriteBufferHighWaterMark(int writeBufferHighWaterMark) {
         super.setWriteBufferHighWaterMark(writeBufferHighWaterMark);
         return this;
     }
 
     @Override
-    @Deprecated
     public EpollChannelConfig setWriteBufferLowWaterMark(int writeBufferLowWaterMark) {
         super.setWriteBufferLowWaterMark(writeBufferLowWaterMark);
-        return this;
-    }
-
-    @Override
-    public EpollChannelConfig setWriteBufferWaterMark(WriteBufferWaterMark writeBufferWaterMark) {
-        super.setWriteBufferWaterMark(writeBufferWaterMark);
         return this;
     }
 
@@ -135,7 +119,7 @@ public class EpollChannelConfig extends DefaultChannelConfig {
      * {@link EpollMode#LEVEL_TRIGGERED}.
      */
     public EpollMode getEpollMode() {
-        return ((AbstractEpollChannel) channel).isFlagSet(Native.EPOLLET)
+        return channel.isFlagSet(Native.EPOLLET)
                 ? EpollMode.EDGE_TRIGGERED : EpollMode.LEVEL_TRIGGERED;
     }
 
@@ -148,17 +132,18 @@ public class EpollChannelConfig extends DefaultChannelConfig {
      * <strong>Be aware this config setting can only be adjusted before the channel was registered.</strong>
      */
     public EpollChannelConfig setEpollMode(EpollMode mode) {
-        ObjectUtil.checkNotNull(mode, "mode");
-
+        if (mode == null) {
+            throw new NullPointerException("mode");
+        }
         try {
             switch (mode) {
             case EDGE_TRIGGERED:
                 checkChannelNotRegistered();
-                ((AbstractEpollChannel) channel).setFlag(Native.EPOLLET);
+                channel.setFlag(Native.EPOLLET);
                 break;
             case LEVEL_TRIGGERED:
                 checkChannelNotRegistered();
-                ((AbstractEpollChannel) channel).clearFlag(Native.EPOLLET);
+                channel.clearFlag(Native.EPOLLET);
                 break;
             default:
                 throw new Error();
@@ -177,14 +162,6 @@ public class EpollChannelConfig extends DefaultChannelConfig {
 
     @Override
     protected final void autoReadCleared() {
-        ((AbstractEpollChannel) channel).clearEpollIn();
-    }
-
-    final void setMaxBytesPerGatheringWrite(long maxBytesPerGatheringWrite) {
-        this.maxBytesPerGatheringWrite = maxBytesPerGatheringWrite;
-    }
-
-    final long getMaxBytesPerGatheringWrite() {
-        return maxBytesPerGatheringWrite;
+        channel.clearEpollIn();
     }
 }

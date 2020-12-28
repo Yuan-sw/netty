@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -33,10 +33,6 @@ public interface SelectStrategy {
      * Indicates the IO loop should be retried, no blocking select to follow directly.
      */
     int CONTINUE = -2;
-    /**
-     * Indicates the IO loop to poll for new events without blocking.
-     */
-    int BUSY_WAIT = -3;
 
     /**
      * The {@link SelectStrategy} can be used to steer the outcome of a potential select

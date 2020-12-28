@@ -6,7 +6,7 @@
   ~ version 2.0 (the "License"); you may not use this file except in compliance
   ~ with the License. You may obtain a copy of the License at:
   ~
-  ~   https://www.apache.org/licenses/LICENSE-2.0
+  ~   http://www.apache.org/licenses/LICENSE-2.0
   ~
   ~ Unless required by applicable law or agreed to in writing, software
   ~ distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,14 +14,14 @@
   ~ License for the specific language governing permissions and limitations
   ~ under the License.
   -->
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
 
   <modelVersion>4.0.0</modelVersion>
 
   <parent>
     <groupId>io.netty</groupId>
     <artifactId>netty-parent</artifactId>
-    <version>4.1.57.Final-SNAPSHOT</version>
+    <version>4.0.57.Final-SNAPSHOT</version>
   </parent>
 
   <artifactId>netty-common</artifactId>
@@ -29,22 +29,7 @@
 
   <name>Netty/Common</name>
 
-  <properties>
-    <javaModuleName>io.netty.common</javaModuleName>
-    <collection.template.dir>${project.basedir}/src/main/templates</collection.template.dir>
-    <collection.template.test.dir>${project.basedir}/src/test/templates</collection.template.test.dir>
-    <collection.src.dir>${project.build.directory}/generated-sources/collections/java</collection.src.dir>
-    <collection.testsrc.dir>${project.build.directory}/generated-test-sources/collections/java</collection.testsrc.dir>
-  </properties>
-
   <dependencies>
-    <dependency>
-      <groupId>com.oracle.substratevm</groupId>
-      <artifactId>svm</artifactId>
-      <version>${graalvm.version}</version>
-      <!-- Provided scope as it is only needed for compiling the SVM substitution classes -->
-      <scope>provided</scope>
-    </dependency>
     <dependency>
       <groupId>org.jctools</groupId>
       <artifactId>jctools-core</artifactId>
@@ -79,21 +64,8 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>io.projectreactor.tools</groupId>
-      <artifactId>blockhound</artifactId>
-      <optional>true</optional>
-    </dependency>
-    <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-core</artifactId>
-    </dependency>
-    <!-- Add dependency on dev-tools as otherwise the build will fail if not installed first manually -->
-    <!-- See https://github.com/netty/netty/issues/7842 -->
-    <dependency>
-      <groupId>io.netty</groupId>
-      <artifactId>netty-dev-tools</artifactId>
-      <scope>test</scope>
-      <optional>true</optional>
     </dependency>
   </dependencies>
 
@@ -120,70 +92,6 @@
                 </relocation>
               </relocations>
               <minimizeJar>true</minimizeJar>
-              <createSourcesJar>true</createSourcesJar>
-              <shadeSourcesContent>true</shadeSourcesContent>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-      <!-- Add generated collection sources. -->
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <id>add-source</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>add-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>${collection.src.dir}</source>
-              </sources>
-            </configuration>
-          </execution>
-          <execution>
-            <id>add-test-source</id>
-            <phase>generate-test-sources</phase>
-            <goals>
-              <goal>add-test-source</goal>
-            </goals>
-            <configuration>
-              <sources>
-                <source>${collection.testsrc.dir}</source>
-              </sources>
-            </configuration>
-          </execution>
-        </executions>
-      </plugin>
-
-      <!-- Generate the primitive collections from the template files. -->
-      <plugin>
-        <groupId>org.codehaus.gmaven</groupId>
-        <artifactId>groovy-maven-plugin</artifactId>
-        <version>2.0</version>
-        <dependencies>
-          <dependency>
-            <groupId>org.codehaus.groovy</groupId>
-            <artifactId>groovy-all</artifactId>
-            <version>2.4.8</version>
-          </dependency>
-          <dependency>
-            <groupId>ant</groupId>
-            <artifactId>ant-optional</artifactId>
-            <version>1.5.3-1</version>
-          </dependency>
-        </dependencies>
-        <executions>
-          <execution>
-            <id>generate-collections</id>
-            <phase>generate-sources</phase>
-            <goals>
-              <goal>execute</goal>
-            </goals>
-            <configuration>
-              <source>${project.basedir}/src/main/script/codegen.groovy</source>
             </configuration>
           </execution>
         </executions>

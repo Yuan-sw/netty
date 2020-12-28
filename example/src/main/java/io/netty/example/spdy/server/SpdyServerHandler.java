@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -27,17 +27,10 @@ import io.netty.util.CharsetUtil;
 
 import java.util.Date;
 
-import static io.netty.handler.codec.http.HttpHeaderNames.CONNECTION;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_LENGTH;
-import static io.netty.handler.codec.http.HttpHeaderNames.CONTENT_TYPE;
-import static io.netty.handler.codec.http.HttpHeaderValues.CLOSE;
-import static io.netty.handler.codec.http.HttpHeaderValues.KEEP_ALIVE;
-import static io.netty.handler.codec.http.HttpResponseStatus.CONTINUE;
-import static io.netty.handler.codec.http.HttpResponseStatus.OK;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_0;
-import static io.netty.handler.codec.http.HttpVersion.HTTP_1_1;
-import static io.netty.handler.codec.http.HttpUtil.is100ContinueExpected;
-import static io.netty.handler.codec.http.HttpUtil.isKeepAlive;
+import static io.netty.handler.codec.http.HttpHeaders.Names.*;
+import static io.netty.handler.codec.http.HttpHeaders.*;
+import static io.netty.handler.codec.http.HttpResponseStatus.*;
+import static io.netty.handler.codec.http.HttpVersion.*;
 
 /**
  * HTTP handler that responds with a "Hello World"
@@ -50,7 +43,7 @@ public class SpdyServerHandler extends SimpleChannelInboundHandler<Object> {
             HttpRequest req = (HttpRequest) msg;
 
             if (is100ContinueExpected(req)) {
-                ctx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE, Unpooled.EMPTY_BUFFER));
+                ctx.write(new DefaultFullHttpResponse(HTTP_1_1, CONTINUE));
             }
             boolean keepAlive = isKeepAlive(req);
 
@@ -58,17 +51,13 @@ public class SpdyServerHandler extends SimpleChannelInboundHandler<Object> {
 
             FullHttpResponse response = new DefaultFullHttpResponse(HTTP_1_1, OK, content);
             response.headers().set(CONTENT_TYPE, "text/plain; charset=UTF-8");
-            response.headers().setInt(CONTENT_LENGTH, response.content().readableBytes());
+            response.headers().set(CONTENT_LENGTH, response.content().readableBytes());
 
-            if (keepAlive) {
-                if (req.protocolVersion().equals(HTTP_1_0)) {
-                    response.headers().set(CONNECTION, KEEP_ALIVE);
-                }
-                ctx.write(response);
-            } else {
-                // Tell the client we're going to close the connection.
-                response.headers().set(CONNECTION, CLOSE);
+            if (!keepAlive) {
                 ctx.write(response).addListener(ChannelFutureListener.CLOSE);
+            } else {
+                response.headers().set(CONNECTION, Values.KEEP_ALIVE);
+                ctx.write(response);
             }
         }
     }

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -14,8 +14,6 @@
  * under the License.
  */
 package io.netty.handler.codec.http;
-
-import io.netty.buffer.ByteBuf;
 
 /**
  * Combine the {@link HttpRequest} and {@link FullHttpMessage}, so the request is a <i>complete</i> HTTP
@@ -26,25 +24,10 @@ public interface FullHttpRequest extends HttpRequest, FullHttpMessage {
     FullHttpRequest copy();
 
     @Override
-    FullHttpRequest duplicate();
-
-    @Override
-    FullHttpRequest retainedDuplicate();
-
-    @Override
-    FullHttpRequest replace(ByteBuf content);
-
-    @Override
     FullHttpRequest retain(int increment);
 
     @Override
     FullHttpRequest retain();
-
-    @Override
-    FullHttpRequest touch();
-
-    @Override
-    FullHttpRequest touch(Object hint);
 
     @Override
     FullHttpRequest setProtocolVersion(HttpVersion version);

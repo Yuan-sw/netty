@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -60,16 +60,7 @@ public final class PemPrivateKey extends AbstractReferenceCounted implements Pri
             return ((PemEncoded) key).retain();
         }
 
-        byte[] bytes = key.getEncoded();
-        if (bytes == null) {
-            throw new IllegalArgumentException(key.getClass().getName() + " does not support encoding");
-        }
-
-        return toPEM(allocator, useDirect, bytes);
-    }
-
-    static PemEncoded toPEM(ByteBufAllocator allocator, boolean useDirect, byte[] bytes) {
-        ByteBuf encoded = Unpooled.wrappedBuffer(bytes);
+        ByteBuf encoded = Unpooled.wrappedBuffer(key.getEncoded());
         try {
             ByteBuf base64 = SslUtils.toBase64(allocator, encoded);
             try {
@@ -142,34 +133,12 @@ public final class PemPrivateKey extends AbstractReferenceCounted implements Pri
 
     @Override
     public PemPrivateKey copy() {
-        return replace(content.copy());
+        return new PemPrivateKey(content.copy());
     }
 
     @Override
     public PemPrivateKey duplicate() {
-        return replace(content.duplicate());
-    }
-
-    @Override
-    public PemPrivateKey retainedDuplicate() {
-        return replace(content.retainedDuplicate());
-    }
-
-    @Override
-    public PemPrivateKey replace(ByteBuf content) {
-        return new PemPrivateKey(content);
-    }
-
-    @Override
-    public PemPrivateKey touch() {
-        content.touch();
-        return this;
-    }
-
-    @Override
-    public PemPrivateKey touch(Object hint) {
-        content.touch(hint);
-        return this;
+        return new PemPrivateKey(content.duplicate());
     }
 
     @Override
@@ -211,7 +180,6 @@ public final class PemPrivateKey extends AbstractReferenceCounted implements Pri
      *
      * @see Destroyable#destroy()
      */
-    @Override
     public void destroy() {
         release(refCnt());
     }
@@ -223,7 +191,6 @@ public final class PemPrivateKey extends AbstractReferenceCounted implements Pri
      *
      * @see Destroyable#isDestroyed()
      */
-    @Override
     public boolean isDestroyed() {
         return refCnt() == 0;
     }

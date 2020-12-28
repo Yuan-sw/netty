@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,7 +23,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.channel.WriteBufferWaterMark;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.oio.OioSocketChannel;
 import org.junit.Test;
@@ -38,11 +37,7 @@ import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.junit.Assume.assumeFalse;
 
 public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
@@ -56,10 +51,9 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
         TestHandler h = new TestHandler();
         ServerSocket ss = new ServerSocket();
         Socket s = null;
-        SocketChannel ch = null;
         try {
             ss.bind(newSocketAddress());
-            ch = (SocketChannel) cb.handler(h).connect(ss.getLocalSocketAddress()).sync().channel();
+            SocketChannel ch = (SocketChannel) cb.handler(h).connect(ss.getLocalSocketAddress()).sync().channel();
             assertTrue(ch.isActive());
             assertFalse(ch.isOutputShutdown());
 
@@ -82,14 +76,11 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
             assertTrue(h.ch.isOutputShutdown());
 
             // If half-closed, the peer should be able to write something.
-            s.getOutputStream().write(new byte[] { 1 });
+            s.getOutputStream().write(1);
             assertEquals(1, (int) h.queue.take());
         } finally {
             if (s != null) {
                 s.close();
-            }
-            if (ch != null) {
-                ch.close();
             }
             ss.close();
         }
@@ -111,12 +102,6 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
             s = ss.accept();
 
             ch.close().syncUninterruptibly();
-            try {
-                ch.shutdownInput().syncUninterruptibly();
-                fail();
-            } catch (Throwable cause) {
-                checkThrowable(cause);
-            }
             try {
                 ch.shutdownOutput().syncUninterruptibly();
                 fail();
@@ -143,7 +128,8 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
         SocketChannel ch = null;
         try {
             ss.bind(newSocketAddress());
-            cb.option(ChannelOption.WRITE_BUFFER_WATER_MARK, new WriteBufferWaterMark(2, 4));
+            cb.option(ChannelOption.WRITE_BUFFER_LOW_WATER_MARK, 2);
+            cb.option(ChannelOption.WRITE_BUFFER_HIGH_WATER_MARK, 4);
             ch = (SocketChannel) cb.handler(h).connect(ss.getLocalSocketAddress()).sync().channel();
             assumeFalse(ch instanceof OioSocketChannel);
             assertTrue(ch.isActive());
@@ -200,19 +186,6 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
     }
 
     public void testShutdownOutputSoLingerNoAssertError(Bootstrap cb) throws Throwable {
-        testShutdownSoLingerNoAssertError0(cb, true);
-    }
-
-    @Test(timeout = 30000)
-    public void testShutdownSoLingerNoAssertError() throws Throwable {
-        run();
-    }
-
-    public void testShutdownSoLingerNoAssertError(Bootstrap cb) throws Throwable {
-        testShutdownSoLingerNoAssertError0(cb, false);
-    }
-
-    private void testShutdownSoLingerNoAssertError0(Bootstrap cb, boolean output) throws Throwable {
         ServerSocket ss = new ServerSocket();
         Socket s = null;
 
@@ -225,11 +198,7 @@ public class SocketShutdownOutputBySelfTest extends AbstractClientSocketTest {
 
             cf.sync();
 
-            if (output) {
-                ((SocketChannel) cf.channel()).shutdownOutput().sync();
-            } else {
-                ((SocketChannel) cf.channel()).shutdown().sync();
-            }
+            ((SocketChannel) cf.channel()).shutdownOutput().sync();
         } finally {
             if (s != null) {
                 s.close();

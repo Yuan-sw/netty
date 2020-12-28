@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -18,10 +18,8 @@ package io.netty.handler.codec.http.multipart;
 import io.netty.handler.codec.DecoderException;
 import io.netty.handler.codec.http.HttpConstants;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpHeaderNames;
-import io.netty.handler.codec.http.HttpHeaderValues;
+import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpRequest;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.StringUtil;
 
 import java.nio.charset.Charset;
@@ -48,8 +46,11 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
      * @throws ErrorDataDecoderException
      *             if the default charset was wrong when decoding or other
      *             errors
+     * @throws IncompatibleDataDecoderException
+     *             This exception is deprecated
      */
-    public HttpPostRequestDecoder(HttpRequest request) {
+    public HttpPostRequestDecoder(HttpRequest request)
+            throws ErrorDataDecoderException, IncompatibleDataDecoderException {
         this(new DefaultHttpDataFactory(DefaultHttpDataFactory.MINSIZE), request, HttpConstants.DEFAULT_CHARSET);
     }
 
@@ -64,8 +65,11 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
      * @throws ErrorDataDecoderException
      *             if the default charset was wrong when decoding or other
      *             errors
+     * @throws IncompatibleDataDecoderException
+     *             This exception is deprecated
      */
-    public HttpPostRequestDecoder(HttpDataFactory factory, HttpRequest request) {
+    public HttpPostRequestDecoder(HttpDataFactory factory, HttpRequest request)
+            throws ErrorDataDecoderException, IncompatibleDataDecoderException {
         this(factory, request, HttpConstants.DEFAULT_CHARSET);
     }
 
@@ -82,12 +86,20 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
      * @throws ErrorDataDecoderException
      *             if the default charset was wrong when decoding or other
      *             errors
+     * @throws IncompatibleDataDecoderException
+     *             This exception is deprecated
      */
-    public HttpPostRequestDecoder(HttpDataFactory factory, HttpRequest request, Charset charset) {
-        ObjectUtil.checkNotNull(factory, "factory");
-        ObjectUtil.checkNotNull(request, "request");
-        ObjectUtil.checkNotNull(charset, "charset");
-
+    public HttpPostRequestDecoder(HttpDataFactory factory, HttpRequest request, Charset charset)
+            throws ErrorDataDecoderException, IncompatibleDataDecoderException {
+        if (factory == null) {
+            throw new NullPointerException("factory");
+        }
+        if (request == null) {
+            throw new NullPointerException("request");
+        }
+        if (charset == null) {
+            throw new NullPointerException("charset");
+        }
         // Fill default values
         if (isMultipart(request)) {
             decoder = new HttpPostMultipartRequestDecoder(factory, request, charset);
@@ -136,11 +148,11 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
      * @return True if the request is a Multipart request
      */
     public static boolean isMultipart(HttpRequest request) {
-        String mimeType = request.headers().get(HttpHeaderNames.CONTENT_TYPE);
-        if (mimeType != null && mimeType.startsWith(HttpHeaderValues.MULTIPART_FORM_DATA.toString())) {
-            return getMultipartDataBoundary(mimeType) != null;
+        if (request.headers().contains(HttpHeaders.Names.CONTENT_TYPE)) {
+            return getMultipartDataBoundary(request.headers().get(HttpHeaders.Names.CONTENT_TYPE)) != null;
+        } else {
+            return false;
         }
-        return false;
     }
 
     /**
@@ -151,11 +163,11 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
     protected static String[] getMultipartDataBoundary(String contentType) {
         // Check if Post using "multipart/form-data; boundary=--89421926422648 [; charset=xxx]"
         String[] headerContentType = splitHeaderContentType(contentType);
-        final String multiPartHeader = HttpHeaderValues.MULTIPART_FORM_DATA.toString();
+        final String multiPartHeader = HttpHeaders.Values.MULTIPART_FORM_DATA;
         if (headerContentType[0].regionMatches(true, 0, multiPartHeader, 0 , multiPartHeader.length())) {
             int mrank;
             int crank;
-            final String boundaryHeader = HttpHeaderValues.BOUNDARY.toString();
+            final String boundaryHeader = HttpHeaders.Values.BOUNDARY;
             if (headerContentType[1].regionMatches(true, 0, boundaryHeader, 0, boundaryHeader.length())) {
                 mrank = 1;
                 crank = 2;
@@ -176,7 +188,7 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
                     boundary = bound.substring(1, index);
                 }
             }
-            final String charsetHeader = HttpHeaderValues.CHARSET.toString();
+            final String charsetHeader = HttpHeaders.Values.CHARSET;
             if (headerContentType[crank].regionMatches(true, 0, charsetHeader, 0, charsetHeader.length())) {
                 String charset = StringUtil.substringAfter(headerContentType[crank], '=');
                 if (charset != null) {
@@ -234,11 +246,6 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
     }
 
     @Override
-    public InterfaceHttpData currentPartialHttpData() {
-        return decoder.currentPartialHttpData();
-    }
-
-    @Override
     public void destroy() {
         decoder.destroy();
     }
@@ -252,7 +259,30 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
     public void removeHttpDataFromClean(InterfaceHttpData data) {
         decoder.removeHttpDataFromClean(data);
     }
-
+    /**
+     * Utility function to add a new decoded data
+     */
+    protected void addHttpData(InterfaceHttpData data) {
+        if (decoder instanceof HttpPostMultipartRequestDecoder) {
+            ((HttpPostMultipartRequestDecoder) decoder).addHttpData(data);
+        } else {
+            ((HttpPostStandardRequestDecoder) decoder).addHttpData(data);
+        }
+    }
+    /**
+     * Get the FileUpload (new one or current one)
+     *
+     * @param delimiter
+     *            the delimiter to use
+     * @return the InterfaceHttpData if any
+     * @throws ErrorDataDecoderException
+     */
+    protected InterfaceHttpData getFileUpload(String delimiter) {
+        if (decoder instanceof HttpPostMultipartRequestDecoder) {
+            ((HttpPostMultipartRequestDecoder) decoder).getFileUpload(delimiter);
+        }
+        return null;
+    }
     /**
      * Split the very first line (Content-Type value) in 3 Strings
      *
@@ -335,6 +365,27 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
         }
 
         public ErrorDataDecoderException(String msg, Throwable cause) {
+            super(msg, cause);
+        }
+    }
+    /**
+     * Exception when an unappropriated getMethod was called on a request
+     */
+    public static class IncompatibleDataDecoderException extends DecoderException {
+        private static final long serialVersionUID = -953268047926250267L;
+
+        public IncompatibleDataDecoderException() {
+        }
+
+        public IncompatibleDataDecoderException(String msg) {
+            super(msg);
+        }
+
+        public IncompatibleDataDecoderException(Throwable cause) {
+            super(cause);
+        }
+
+        public IncompatibleDataDecoderException(String msg, Throwable cause) {
             super(msg, cause);
         }
     }

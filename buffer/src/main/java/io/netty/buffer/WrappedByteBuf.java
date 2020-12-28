@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -16,8 +16,6 @@
 
 package io.netty.buffer;
 
-import io.netty.util.ByteProcessor;
-import io.netty.util.internal.ObjectUtil;
 import io.netty.util.internal.StringUtil;
 
 import java.io.IOException;
@@ -25,7 +23,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.channels.FileChannel;
 import java.nio.channels.GatheringByteChannel;
 import java.nio.channels.ScatteringByteChannel;
 import java.nio.charset.Charset;
@@ -42,17 +39,15 @@ class WrappedByteBuf extends ByteBuf {
     protected final ByteBuf buf;
 
     protected WrappedByteBuf(ByteBuf buf) {
-        this.buf = ObjectUtil.checkNotNull(buf, "buf");
+        if (buf == null) {
+            throw new NullPointerException("buf");
+        }
+        this.buf = buf;
     }
 
     @Override
     public final boolean hasMemoryAddress() {
         return buf.hasMemoryAddress();
-    }
-
-    @Override
-    public boolean isContiguous() {
-        return buf.isContiguous();
     }
 
     @Override
@@ -94,16 +89,6 @@ class WrappedByteBuf extends ByteBuf {
     @Override
     public final ByteBuf unwrap() {
         return buf;
-    }
-
-    @Override
-    public ByteBuf asReadOnly() {
-        return buf.asReadOnly();
-    }
-
-    @Override
-    public boolean isReadOnly() {
-        return buf.isReadOnly();
     }
 
     @Override
@@ -152,11 +137,6 @@ class WrappedByteBuf extends ByteBuf {
     @Override
     public final int maxWritableBytes() {
         return buf.maxWritableBytes();
-    }
-
-    @Override
-    public int maxFastWritableBytes() {
-        return buf.maxFastWritableBytes();
     }
 
     @Override
@@ -243,18 +223,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public short getShortLE(int index) {
-        return buf.getShortLE(index);
-    }
-
-    @Override
     public int getUnsignedShort(int index) {
         return buf.getUnsignedShort(index);
-    }
-
-    @Override
-    public int getUnsignedShortLE(int index) {
-        return buf.getUnsignedShortLE(index);
     }
 
     @Override
@@ -263,18 +233,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int getMediumLE(int index) {
-        return buf.getMediumLE(index);
-    }
-
-    @Override
     public int getUnsignedMedium(int index) {
         return buf.getUnsignedMedium(index);
-    }
-
-    @Override
-    public int getUnsignedMediumLE(int index) {
-        return buf.getUnsignedMediumLE(index);
     }
 
     @Override
@@ -283,28 +243,13 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int getIntLE(int index) {
-        return buf.getIntLE(index);
-    }
-
-    @Override
     public long getUnsignedInt(int index) {
         return buf.getUnsignedInt(index);
     }
 
     @Override
-    public long getUnsignedIntLE(int index) {
-        return buf.getUnsignedIntLE(index);
-    }
-
-    @Override
     public long getLong(int index) {
         return buf.getLong(index);
-    }
-
-    @Override
-    public long getLongLE(int index) {
-        return buf.getLongLE(index);
     }
 
     @Override
@@ -370,16 +315,6 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int getBytes(int index, FileChannel out, long position, int length) throws IOException {
-        return buf.getBytes(index, out, position, length);
-    }
-
-    @Override
-    public CharSequence getCharSequence(int index, int length, Charset charset) {
-        return buf.getCharSequence(index, length, charset);
-    }
-
-    @Override
     public ByteBuf setBoolean(int index, boolean value) {
         buf.setBoolean(index, value);
         return this;
@@ -398,20 +333,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf setShortLE(int index, int value) {
-        buf.setShortLE(index, value);
-        return this;
-    }
-
-    @Override
     public ByteBuf setMedium(int index, int value) {
         buf.setMedium(index, value);
-        return this;
-    }
-
-    @Override
-    public ByteBuf setMediumLE(int index, int value) {
-        buf.setMediumLE(index, value);
         return this;
     }
 
@@ -422,20 +345,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf setIntLE(int index, int value) {
-        buf.setIntLE(index, value);
-        return this;
-    }
-
-    @Override
     public ByteBuf setLong(int index, long value) {
         buf.setLong(index, value);
-        return this;
-    }
-
-    @Override
-    public ByteBuf setLongLE(int index, long value) {
-        buf.setLongLE(index, value);
         return this;
     }
 
@@ -504,19 +415,9 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int setBytes(int index, FileChannel in, long position, int length) throws IOException {
-        return buf.setBytes(index, in, position, length);
-    }
-
-    @Override
     public ByteBuf setZero(int index, int length) {
         buf.setZero(index, length);
         return this;
-    }
-
-    @Override
-    public int setCharSequence(int index, CharSequence sequence, Charset charset) {
-        return buf.setCharSequence(index, sequence, charset);
     }
 
     @Override
@@ -540,18 +441,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public short readShortLE() {
-        return buf.readShortLE();
-    }
-
-    @Override
     public int readUnsignedShort() {
         return buf.readUnsignedShort();
-    }
-
-    @Override
-    public int readUnsignedShortLE() {
-        return buf.readUnsignedShortLE();
     }
 
     @Override
@@ -560,18 +451,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readMediumLE() {
-        return buf.readMediumLE();
-    }
-
-    @Override
     public int readUnsignedMedium() {
         return buf.readUnsignedMedium();
-    }
-
-    @Override
-    public int readUnsignedMediumLE() {
-        return buf.readUnsignedMediumLE();
     }
 
     @Override
@@ -580,28 +461,13 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readIntLE() {
-        return buf.readIntLE();
-    }
-
-    @Override
     public long readUnsignedInt() {
         return buf.readUnsignedInt();
     }
 
     @Override
-    public long readUnsignedIntLE() {
-        return buf.readUnsignedIntLE();
-    }
-
-    @Override
     public long readLong() {
         return buf.readLong();
-    }
-
-    @Override
-    public long readLongLE() {
-        return buf.readLongLE();
     }
 
     @Override
@@ -627,11 +493,6 @@ class WrappedByteBuf extends ByteBuf {
     @Override
     public ByteBuf readSlice(int length) {
         return buf.readSlice(length);
-    }
-
-    @Override
-    public ByteBuf readRetainedSlice(int length) {
-        return buf.readRetainedSlice(length);
     }
 
     @Override
@@ -682,16 +543,6 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int readBytes(FileChannel out, long position, int length) throws IOException {
-        return buf.readBytes(out, position, length);
-    }
-
-    @Override
-    public CharSequence readCharSequence(int length, Charset charset) {
-        return buf.readCharSequence(length, charset);
-    }
-
-    @Override
     public ByteBuf skipBytes(int length) {
         buf.skipBytes(length);
         return this;
@@ -716,20 +567,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf writeShortLE(int value) {
-        buf.writeShortLE(value);
-        return this;
-    }
-
-    @Override
     public ByteBuf writeMedium(int value) {
         buf.writeMedium(value);
-        return this;
-    }
-
-    @Override
-    public ByteBuf writeMediumLE(int value) {
-        buf.writeMediumLE(value);
         return this;
     }
 
@@ -740,20 +579,8 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf writeIntLE(int value) {
-        buf.writeIntLE(value);
-        return this;
-    }
-
-    @Override
     public ByteBuf writeLong(long value) {
         buf.writeLong(value);
-        return this;
-    }
-
-    @Override
-    public ByteBuf writeLongLE(long value) {
-        buf.writeLongLE(value);
         return this;
     }
 
@@ -822,19 +649,9 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int writeBytes(FileChannel in, long position, int length) throws IOException {
-        return buf.writeBytes(in, position, length);
-    }
-
-    @Override
     public ByteBuf writeZero(int length) {
         buf.writeZero(length);
         return this;
-    }
-
-    @Override
-    public int writeCharSequence(CharSequence sequence, Charset charset) {
-        return buf.writeCharSequence(sequence, charset);
     }
 
     @Override
@@ -858,22 +675,22 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public int forEachByte(ByteProcessor processor) {
+    public int forEachByte(ByteBufProcessor processor) {
         return buf.forEachByte(processor);
     }
 
     @Override
-    public int forEachByte(int index, int length, ByteProcessor processor) {
+    public int forEachByte(int index, int length, ByteBufProcessor processor) {
         return buf.forEachByte(index, length, processor);
     }
 
     @Override
-    public int forEachByteDesc(ByteProcessor processor) {
+    public int forEachByteDesc(ByteBufProcessor processor) {
         return buf.forEachByteDesc(processor);
     }
 
     @Override
-    public int forEachByteDesc(int index, int length, ByteProcessor processor) {
+    public int forEachByteDesc(int index, int length, ByteBufProcessor processor) {
         return buf.forEachByteDesc(index, length, processor);
     }
 
@@ -893,28 +710,13 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf retainedSlice() {
-        return buf.retainedSlice();
-    }
-
-    @Override
     public ByteBuf slice(int index, int length) {
         return buf.slice(index, length);
     }
 
     @Override
-    public ByteBuf retainedSlice(int index, int length) {
-        return buf.retainedSlice(index, length);
-    }
-
-    @Override
     public ByteBuf duplicate() {
         return buf.duplicate();
-    }
-
-    @Override
-    public ByteBuf retainedDuplicate() {
-        return buf.retainedDuplicate();
     }
 
     @Override
@@ -1006,18 +808,6 @@ class WrappedByteBuf extends ByteBuf {
     }
 
     @Override
-    public ByteBuf touch() {
-        buf.touch();
-        return this;
-    }
-
-    @Override
-    public ByteBuf touch(Object hint) {
-        buf.touch(hint);
-        return this;
-    }
-
-    @Override
     public final boolean isReadable(int size) {
         return buf.isReadable(size);
     }
@@ -1040,10 +830,5 @@ class WrappedByteBuf extends ByteBuf {
     @Override
     public boolean release(int decrement) {
         return buf.release(decrement);
-    }
-
-    @Override
-    final boolean isAccessible() {
-        return buf.isAccessible();
     }
 }

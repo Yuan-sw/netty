@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -227,21 +227,6 @@ public class HashedWheelTimerTest {
         latch.await();
 
         assertEquals(0, timer.pendingTimeouts());
-        timer.stop();
-    }
-
-    @Test
-    public void testOverflow() throws InterruptedException  {
-        final HashedWheelTimer timer = new HashedWheelTimer();
-        final CountDownLatch latch = new CountDownLatch(1);
-        Timeout timeout = timer.newTimeout(new TimerTask() {
-            @Override
-            public void run(Timeout timeout) {
-                latch.countDown();
-            }
-        }, Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-        assertFalse(latch.await(1, TimeUnit.SECONDS));
-        timeout.cancel();
         timer.stop();
     }
 

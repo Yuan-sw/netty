@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -119,16 +119,6 @@ public interface InterfaceHttpPostRequestDecoder {
      *             No more data will be available
      */
     InterfaceHttpData next();
-
-    /**
-     * Returns the current InterfaceHttpData if currently in decoding status,
-     * meaning all data are not yet within, or null if there is no InterfaceHttpData
-     * currently in decoding status (either because none yet decoded or none currently partially
-     * decoded). Full decoded ones are accessible through hasNext() and next() methods.
-     *
-     * @return the current InterfaceHttpData if currently in decoding status or null if none.
-     */
-    InterfaceHttpData currentPartialHttpData();
 
     /**
      * Destroy the {@link InterfaceHttpPostRequestDecoder} and release all it resources. After this method

@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -17,6 +17,7 @@
 package io.netty.bootstrap;
 
 import io.netty.channel.Channel;
+import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandler;
@@ -25,23 +26,18 @@ import io.netty.channel.ChannelPromise;
 import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
-import io.netty.channel.ReflectiveChannelFactory;
+import io.netty.util.internal.SocketUtils;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.EventExecutor;
 import io.netty.util.concurrent.GlobalEventExecutor;
-import io.netty.util.internal.ObjectUtil;
-import io.netty.util.internal.SocketUtils;
 import io.netty.util.internal.StringUtil;
 import io.netty.util.internal.logging.InternalLogger;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * {@link AbstractBootstrap} is a helper class that makes it easy to bootstrap a {@link Channel}. It support
@@ -51,20 +47,12 @@ import java.util.concurrent.ConcurrentHashMap;
  * transports such as datagram (UDP).</p>
  */
 public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C extends Channel> implements Cloneable {
-    @SuppressWarnings("unchecked")
-    static final Map.Entry<ChannelOption<?>, Object>[] EMPTY_OPTION_ARRAY = new Map.Entry[0];
-    @SuppressWarnings("unchecked")
-    static final Map.Entry<AttributeKey<?>, Object>[] EMPTY_ATTRIBUTE_ARRAY = new Map.Entry[0];
 
     volatile EventLoopGroup group;
-    @SuppressWarnings("deprecation")
     private volatile ChannelFactory<? extends C> channelFactory;
     private volatile SocketAddress localAddress;
-
-    // The order in which ChannelOptions are applied is important they may depend on each other for validation
-    // purposes.
     private final Map<ChannelOption<?>, Object> options = new LinkedHashMap<ChannelOption<?>, Object>();
-    private final Map<AttributeKey<?>, Object> attrs = new ConcurrentHashMap<AttributeKey<?>, Object>();
+    private final Map<AttributeKey<?>, Object> attrs = new LinkedHashMap<AttributeKey<?>, Object>();
     private volatile ChannelHandler handler;
 
     AbstractBootstrap() {
@@ -79,7 +67,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         synchronized (bootstrap.options) {
             options.putAll(bootstrap.options);
         }
-        attrs.putAll(bootstrap.attrs);
+        synchronized (bootstrap.attrs) {
+            attrs.putAll(bootstrap.attrs);
+        }
     }
 
     /**
@@ -87,7 +77,9 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * {@link Channel}
      */
     public B group(EventLoopGroup group) {
-        ObjectUtil.checkNotNull(group, "group");
+        if (group == null) {
+            throw new NullPointerException("group");
+        }
         if (this.group != null) {
             throw new IllegalStateException("group set already");
         }
@@ -102,21 +94,27 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
 
     /**
      * The {@link Class} which is used to create {@link Channel} instances from.
-     * You either use this or {@link #channelFactory(io.netty.channel.ChannelFactory)} if your
+     * You either use this or {@link #channelFactory(ChannelFactory)} if your
      * {@link Channel} implementation has no no-args constructor.
      */
     public B channel(Class<? extends C> channelClass) {
-        return channelFactory(new ReflectiveChannelFactory<C>(
-                ObjectUtil.checkNotNull(channelClass, "channelClass")
-        ));
+        if (channelClass == null) {
+            throw new NullPointerException("channelClass");
+        }
+        return channelFactory(new BootstrapChannelFactory<C>(channelClass));
     }
 
     /**
-     * @deprecated Use {@link #channelFactory(io.netty.channel.ChannelFactory)} instead.
+     * {@link ChannelFactory} which is used to create {@link Channel} instances from
+     * when calling {@link #bind()}. This method is usually only used if {@link #channel(Class)}
+     * is not working for you because of some more complex needs. If your {@link Channel} implementation
+     * has a no-args constructor, its highly recommend to just use {@link #channel(Class)} for
+     * simplify your code.
      */
-    @Deprecated
     public B channelFactory(ChannelFactory<? extends C> channelFactory) {
-        ObjectUtil.checkNotNull(channelFactory, "channelFactory");
+        if (channelFactory == null) {
+            throw new NullPointerException("channelFactory");
+        }
         if (this.channelFactory != null) {
             throw new IllegalStateException("channelFactory set already");
         }
@@ -126,19 +124,8 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     }
 
     /**
-     * {@link io.netty.channel.ChannelFactory} which is used to create {@link Channel} instances from
-     * when calling {@link #bind()}. This method is usually only used if {@link #channel(Class)}
-     * is not working for you because of some more complex needs. If your {@link Channel} implementation
-     * has a no-args constructor, its highly recommend to just use {@link #channel(Class)} to
-     * simplify your code.
-     */
-    @SuppressWarnings({ "unchecked", "deprecation" })
-    public B channelFactory(io.netty.channel.ChannelFactory<? extends C> channelFactory) {
-        return channelFactory((ChannelFactory<C>) channelFactory);
-    }
-
-    /**
      * The {@link SocketAddress} which is used to bind the local "end" to.
+     *
      */
     public B localAddress(SocketAddress localAddress) {
         this.localAddress = localAddress;
@@ -171,11 +158,15 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * created. Use a value of {@code null} to remove a previous set {@link ChannelOption}.
      */
     public <T> B option(ChannelOption<T> option, T value) {
-        ObjectUtil.checkNotNull(option, "option");
-        synchronized (options) {
-            if (value == null) {
+        if (option == null) {
+            throw new NullPointerException("option");
+        }
+        if (value == null) {
+            synchronized (options) {
                 options.remove(option);
-            } else {
+            }
+        } else {
+            synchronized (options) {
                 options.put(option, value);
             }
         }
@@ -187,11 +178,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * {@code null}, the attribute of the specified {@code key} is removed.
      */
     public <T> B attr(AttributeKey<T> key, T value) {
-        ObjectUtil.checkNotNull(key, "key");
+        if (key == null) {
+            throw new NullPointerException("key");
+        }
         if (value == null) {
-            attrs.remove(key);
+            synchronized (attrs) {
+                attrs.remove(key);
+            }
         } else {
-            attrs.put(key, value);
+            synchronized (attrs) {
+                attrs.put(key, value);
+            }
         }
         return self();
     }
@@ -265,7 +262,10 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      */
     public ChannelFuture bind(SocketAddress localAddress) {
         validate();
-        return doBind(ObjectUtil.checkNotNull(localAddress, "localAddress"));
+        if (localAddress == null) {
+            throw new NullPointerException("localAddress");
+        }
+        return doBind(localAddress);
     }
 
     private ChannelFuture doBind(final SocketAddress localAddress) {
@@ -294,7 +294,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
                     } else {
                         // Registration was successful, so set the correct executor to use.
                         // See https://github.com/netty/netty/issues/2586
-                        promise.registered();
+                        promise.executor = channel.eventLoop();
 
                         doBind0(regFuture, channel, localAddress, promise);
                     }
@@ -307,7 +307,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     final ChannelFuture initAndRegister() {
         Channel channel = null;
         try {
-            channel = channelFactory.newChannel();
+            channel = channelFactory().newChannel();
             init(channel);
         } catch (Throwable t) {
             if (channel != null) {
@@ -320,7 +320,7 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
             return new DefaultChannelPromise(new FailedChannel(), GlobalEventExecutor.INSTANCE).setFailure(t);
         }
 
-        ChannelFuture regFuture = config().group().register(channel);
+        ChannelFuture regFuture = group().register(channel);
         if (regFuture.cause() != null) {
             if (channel.isRegistered()) {
                 channel.close();
@@ -365,45 +365,17 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
      * the {@link ChannelHandler} to use for serving the requests.
      */
     public B handler(ChannelHandler handler) {
-        this.handler = ObjectUtil.checkNotNull(handler, "handler");
-        return self();
-    }
-
-    /**
-     * Returns the configured {@link EventLoopGroup} or {@code null} if non is configured yet.
-     *
-     * @deprecated Use {@link #config()} instead.
-     */
-    @Deprecated
-    public final EventLoopGroup group() {
-        return group;
-    }
-
-    /**
-     * Returns the {@link AbstractBootstrapConfig} object that can be used to obtain the current config
-     * of the bootstrap.
-     */
-    public abstract AbstractBootstrapConfig<B, C> config();
-
-    final Map.Entry<ChannelOption<?>, Object>[] newOptionsArray() {
-        synchronized (options) {
-            return options.entrySet().toArray(EMPTY_OPTION_ARRAY);
+        if (handler == null) {
+            throw new NullPointerException("handler");
         }
-    }
-
-    final Map<ChannelOption<?>, Object> options0() {
-        return options;
-    }
-
-    final Map<AttributeKey<?>, Object> attrs0() {
-        return attrs;
+        this.handler = handler;
+        return self();
     }
 
     final SocketAddress localAddress() {
         return localAddress;
     }
 
-    @SuppressWarnings("deprecation")
     final ChannelFactory<? extends C> channelFactory() {
         return channelFactory;
     }
@@ -412,28 +384,25 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
         return handler;
     }
 
+    /**
+     * Return the configured {@link EventLoopGroup} or {@code null} if non is configured yet.
+     */
+    public EventLoopGroup group() {
+        return group;
+    }
+
     final Map<ChannelOption<?>, Object> options() {
-        synchronized (options) {
-            return copiedMap(options);
-        }
+        return options;
     }
 
     final Map<AttributeKey<?>, Object> attrs() {
-        return copiedMap(attrs);
+        return attrs;
     }
 
-    static <K, V> Map<K, V> copiedMap(Map<K, V> map) {
-        if (map.isEmpty()) {
-            return Collections.emptyMap();
-        }
-        return Collections.unmodifiableMap(new HashMap<K, V>(map));
-    }
-
-    static void setAttributes(Channel channel, Map.Entry<AttributeKey<?>, Object>[] attrs) {
-        for (Map.Entry<AttributeKey<?>, Object> e: attrs) {
-            @SuppressWarnings("unchecked")
-            AttributeKey<Object> key = (AttributeKey<Object>) e.getKey();
-            channel.attr(key).set(e.getValue());
+    static void setChannelOptions(
+            Channel channel, Map<ChannelOption<?>, Object> options, InternalLogger logger) {
+        for (Map.Entry<ChannelOption<?>, Object> e: options.entrySet()) {
+            setChannelOption(channel, e.getKey(), e.getValue(), logger);
         }
     }
 
@@ -461,31 +430,89 @@ public abstract class AbstractBootstrap<B extends AbstractBootstrap<B, C>, C ext
     public String toString() {
         StringBuilder buf = new StringBuilder()
             .append(StringUtil.simpleClassName(this))
-            .append('(').append(config()).append(')');
+            .append('(');
+        if (group != null) {
+            buf.append("group: ")
+               .append(StringUtil.simpleClassName(group))
+               .append(", ");
+        }
+        if (channelFactory != null) {
+            buf.append("channelFactory: ")
+               .append(channelFactory)
+               .append(", ");
+        }
+        if (localAddress != null) {
+            buf.append("localAddress: ")
+               .append(localAddress)
+               .append(", ");
+        }
+        synchronized (options) {
+            if (!options.isEmpty()) {
+                buf.append("options: ")
+                   .append(options)
+                   .append(", ");
+            }
+        }
+        synchronized (attrs) {
+            if (!attrs.isEmpty()) {
+                buf.append("attrs: ")
+                   .append(attrs)
+                   .append(", ");
+            }
+        }
+        if (handler != null) {
+            buf.append("handler: ")
+               .append(handler)
+               .append(", ");
+        }
+        if (buf.charAt(buf.length() - 1) == '(') {
+            buf.append(')');
+        } else {
+            buf.setCharAt(buf.length() - 2, ')');
+            buf.setLength(buf.length() - 1);
+        }
         return buf.toString();
     }
 
-    static final class PendingRegistrationPromise extends DefaultChannelPromise {
+    private static final class BootstrapChannelFactory<T extends Channel> implements ChannelFactory<T> {
+        private final Class<? extends T> clazz;
 
-        // Is set to the correct EventExecutor once the registration was successful. Otherwise it will
-        // stay null and so the GlobalEventExecutor.INSTANCE will be used for notifications.
-        private volatile boolean registered;
-
-        PendingRegistrationPromise(Channel channel) {
-            super(channel);
+        BootstrapChannelFactory(Class<? extends T> clazz) {
+            this.clazz = clazz;
         }
 
-        void registered() {
-            registered = true;
+        @Override
+        public T newChannel() {
+            try {
+                return clazz.getConstructor().newInstance();
+            } catch (Throwable t) {
+                throw new ChannelException("Unable to create Channel from class " + clazz, t);
+            }
+        }
+
+        @Override
+        public String toString() {
+            return StringUtil.simpleClassName(clazz) + ".class";
+        }
+    }
+
+    private static final class PendingRegistrationPromise extends DefaultChannelPromise {
+        // Is set to the correct EventExecutor once the registration was successful. Otherwise it will
+        // stay null and so the GlobalEventExecutor.INSTANCE will be used for notifications.
+        private volatile EventExecutor executor;
+
+        private PendingRegistrationPromise(Channel channel) {
+            super(channel);
         }
 
         @Override
         protected EventExecutor executor() {
-            if (registered) {
+            EventExecutor executor = this.executor;
+            if (executor != null) {
                 // If the registration was a success executor is set.
                 //
                 // See https://github.com/netty/netty/issues/2586
-                return super.executor();
+                return executor;
             }
             // The registration failed so we can only use the GlobalEventExecutor as last resort to notify.
             return GlobalEventExecutor.INSTANCE;

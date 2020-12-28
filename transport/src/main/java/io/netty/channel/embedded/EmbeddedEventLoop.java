@@ -5,7 +5,7 @@
  * version 2.0 (the "License"); you may not use this file except in compliance
  * with the License. You may obtain a copy of the License at:
  *
- *   https://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -23,7 +23,6 @@ import io.netty.channel.EventLoop;
 import io.netty.channel.EventLoopGroup;
 import io.netty.util.concurrent.AbstractScheduledEventExecutor;
 import io.netty.util.concurrent.Future;
-import io.netty.util.internal.ObjectUtil;
 
 import java.util.ArrayDeque;
 import java.util.Queue;
@@ -34,18 +33,11 @@ final class EmbeddedEventLoop extends AbstractScheduledEventExecutor implements 
     private final Queue<Runnable> tasks = new ArrayDeque<Runnable>(2);
 
     @Override
-    public EventLoopGroup parent() {
-        return (EventLoopGroup) super.parent();
-    }
-
-    @Override
-    public EventLoop next() {
-        return (EventLoop) super.next();
-    }
-
-    @Override
     public void execute(Runnable command) {
-        tasks.add(ObjectUtil.checkNotNull(command, "command"));
+        if (command == null) {
+            throw new NullPointerException("command");
+        }
+        tasks.add(command);
     }
 
     void runTasks() {
@@ -112,23 +104,17 @@ final class EmbeddedEventLoop extends AbstractScheduledEventExecutor implements 
     }
 
     @Override
-    public boolean awaitTermination(long timeout, TimeUnit unit) {
+    public boolean awaitTermination(long timeout, TimeUnit unit)
+            throws InterruptedException {
+        Thread.sleep(unit.toMillis(timeout));
         return false;
     }
 
     @Override
     public ChannelFuture register(Channel channel) {
-        return register(new DefaultChannelPromise(channel, this));
+        return register(channel, new DefaultChannelPromise(channel, this));
     }
 
-    @Override
-    public ChannelFuture register(ChannelPromise promise) {
-        ObjectUtil.checkNotNull(promise, "promise");
-        promise.channel().unsafe().register(this, promise);
-        return promise;
-    }
-
-    @Deprecated
     @Override
     public ChannelFuture register(Channel channel, ChannelPromise promise) {
         channel.unsafe().register(this, promise);
@@ -143,5 +129,15 @@ final class EmbeddedEventLoop extends AbstractScheduledEventExecutor implements 
     @Override
     public boolean inEventLoop(Thread thread) {
         return true;
+    }
+
+    @Override
+    public EventLoop next() {
+        return this;
+    }
+
+    @Override
+    public EventLoopGroup parent() {
+        return this;
     }
 }
